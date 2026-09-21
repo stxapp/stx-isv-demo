@@ -1,0 +1,26 @@
+{
+  "name": "stx-isv-demo-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vite + React frontend for the STX ISV integration demo.",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "phoenix": "^1.7.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/phoenix": "^1.6.5",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

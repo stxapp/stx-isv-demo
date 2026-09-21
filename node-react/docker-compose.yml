@@ -1,0 +1,66 @@
+# STX ISV demo — "Heater" app on a Bun/TS backend + Vite/React frontend.
+#
+#   cp .env.example .env   # fill in CLIENT_ID / CLIENT_SECRET / STX_BASE_URL
+#   docker compose up
+#
+# Then open http://localhost:5173, sign in to Heater, and link your STX account.
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: 8787
+      STX_BASE_URL: ${STX_BASE_URL}
+
+      # --- ISV app: Heater (its OAuth client) ---
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      REDIRECT_URI: ${REDIRECT_URI}
+      OAUTH_SCOPES: ${OAUTH_SCOPES:-identity balance portfolio history trade}
+      APP_ID: ${APP_ID:-heater}
+      APP_NAME: ${APP_NAME:-Heater}
+      APP_TAGLINE: ${APP_TAGLINE:-Fantasy sports, powered by the STX exchange.}
+      APP_BRAND_COLOR: ${APP_BRAND_COLOR:-#ff5a1f}
+      APP_WALLET_CENTS: ${APP_WALLET_CENTS:-25000}
+
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      # SQLite lives on the named volume below.
+      DB_PATH: /app/data/isv.sqlite
+    volumes:
+      - isv_data:/app/data
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      # The browser calls these directly, so they must be reachable from the host.
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8787}
+      VITE_STX_WS_URL: ${VITE_STX_WS_URL:-ws://localhost:4000}
+      VITE_STX_HTTP_URL: ${VITE_STX_HTTP_URL:-http://localhost:4000}
+    depends_on:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # Production-shaped alternative: swap SQLite for Postgres. Uncomment this
+  # service, point the backend's persistence layer at it (implement a Postgres
+  # variant of the stores in backend/src/stores.ts behind the same interfaces),
+  # and set a DATABASE_URL env var on `backend`.
+  #
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: isv
+  #     POSTGRES_PASSWORD: isv
+  #     POSTGRES_DB: isv_demo
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - isv_pg:/var/lib/postgresql/data
+  # ---------------------------------------------------------------------------
+
+volumes:
+  isv_data:
+  # isv_pg:
