@@ -2,7 +2,7 @@
 // (`credentials: "include"`) so the backend can attach the right user's token,
 // and carries `?app=<id>` identifying the ISV app profile the request is for.
 
-const BACKEND = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8787";
+export const BACKEND = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8787";
 
 // Origin the backend is served from. In a single-origin deploy this is the page
 // origin; in split dev it is the backend port (:8787). The OAuth popup relays
@@ -161,17 +161,20 @@ export interface ActivityRecord {
 // (see the message listener in App.tsx). If the browser blocks the popup, fall
 // back to a full-page redirect so linking still works.
 // Open an STX flow (link, deposit, …) in a centered popup so the ISV brand page
-// stays put. Open a BLANK popup first, straight from the click gesture, then
-// navigate it: opening a sized window directly at a URL that 302s to another
-// origin is what pop-up blockers target, whereas about:blank from a gesture is
-// reliably allowed. Only if even that is blocked do we fall back to a redirect.
+// stays put. The popup is opened directly at the URL from the click gesture, so
+// its first document is the STX page itself. (Opening about:blank and navigating
+// it afterwards makes the popup start life on THIS app's origin; browsers with
+// strict storage partitioning, Brave among them, can then split the STX session
+// cookie between the login page and the post-login redirect, which strands the
+// member on the STX home page instead of returning to consent.) If the browser
+// blocks the popup, fall back to a full-page redirect so linking still works.
 export function openStxPopup(url: string, name: string, size?: { w: number; h: number }): void {
   const w = size?.w ?? 480;
   const h = size?.h ?? 720;
   const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
   const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
   const popup = window.open(
-    "about:blank",
+    url,
     name,
     `width=${w},height=${h},left=${left},top=${top},resizable,scrollbars`,
   );
@@ -179,7 +182,6 @@ export function openStxPopup(url: string, name: string, size?: { w: number; h: n
     window.location.href = url;
     return;
   }
-  popup.location.href = url;
   popup.focus();
 }
 

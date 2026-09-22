@@ -20,9 +20,11 @@ import {
   type AccountLink,
   type User,
 } from "../stores";
-import { NotLinkedError, stxRequest, stxGraphQL } from "../stxClient";
+import { NotLinkedError, stxRequest } from "../stxClient";
 import { streamSSE } from "hono/streaming";
 import { subscribe, type LiveEvent } from "../liveProxy";
+import { fetchCatalog } from "../marketCatalog";
+import { MARKET_TOPICS, subscribeMarket, type MarketTopic } from "../marketProxy";
 
 export const apiRoutes = new Hono();
 
@@ -181,53 +183,21 @@ apiRoutes.get("/balance", async (c) => {
   return c.json(body as object, status as never);
 });
 
-// GraphQL order mutations. Order WRITES go through GraphQL because the OAuth
-// bearer authenticates it and Absinthe enforces the member's `trade` scope; the
-// REST order write path assumes an API key. Reads stay on REST (they accept the
-// bearer fine), so the demo exercises both API surfaces.
-const CONFIRM_ORDER = `mutation Place($order: UserOrder!) {
-  confirmOrder(userOrder: $order) {
-    order { id status action orderType price quantity filled insertedAt marketId }
-    errors
-  }
-}`;
-
-const CONFIRM_ORDERS = `mutation PlaceBatch($orders: [UserOrder!]!) {
-  confirmOrders(userOrders: $orders) {
-    results { order { id status action orderType price quantity } errors }
-  }
-}`;
-
-const CANCEL_ORDER = `mutation Cancel($id: rID!) {
-  cancelOrder(orderId: $id) { status }
-}`;
-
-// Settlements read via GraphQL. The REST `GET /api/v1/portfolio/settlements`
-// path is not covered by any OAuth scope server-side (its scope map leaves the
-// `portfolio` REST entry empty), so it 403s for every token — reported to the
-// API/SDK. GraphQL's `mySettlementsHistory` IS mapped to `portfolio` and works.
-const MY_SETTLEMENTS = `query Settlements {
-  mySettlementsHistory {
-    totalCount
-    settlements {
-      id type marketId quantity realizedPnl settledPremium settledRisk fee insertedAtIso
-    }
-  }
-}`;
-
-// Map the demo's flat REST-style order body to the GraphQL UserOrder input:
-// enums are upper-case, price is an INTEGER in cents (omitted for market orders),
-// quantity is a string.
-function toUserOrder(b: Record<string, unknown>): Record<string, unknown> {
+// Map the demo's flat betslip order to the REST order body. The betslip carries
+// price in CENTS (integers, e.g. 44); STX's REST order body wants a DOLLAR
+// STRING (`"0.44"`), lower-case enums and a string quantity, with price omitted
+// for market orders. This is the exact contract of `POST /api/v1/orders`
+// (single) and each leg of `POST /api/v1/orders/batched`.
+function toRestOrder(b: Record<string, unknown>): Record<string, unknown> {
   const orderType = String(b.order_type || "limit").toLowerCase();
   const order: Record<string, unknown> = {
-    marketId: b.market_id,
-    orderType: orderType.toUpperCase(),
-    action: String(b.action || "buy").toUpperCase(),
+    market_id: b.market_id,
+    order_type: orderType,
+    action: String(b.action || "buy").toLowerCase(),
     quantity: String(b.quantity ?? ""),
   };
   if (orderType === "limit" && b.price !== undefined && String(b.price).trim() !== "") {
-    order.price = parseInt(String(b.price), 10);
+    order.price = (Math.round(Number(b.price)) / 100).toFixed(2);
   }
   return order;
 }
@@ -240,46 +210,41 @@ apiRoutes.get("/orders", async (c) => {
   return c.json(body as object, status as never);
 });
 
-// POST /api/orders?app=<id> -> place an order. Body forwarded as-is to STX.
+// POST /api/orders?app=<id> -> place an order via REST `POST /api/v1/orders`.
+// The OAuth bearer carries the member's `trade` scope; STX returns its own
+// status (2xx on placement, 422 with `{ error }` on rejection), forwarded as-is.
 apiRoutes.post("/orders", async (c) => {
   const app = requireApp(c);
   const link = requireLink(requireUser(c, app));
-  const payload = await c.req.json().catch(() => ({}));
-  const { status, body } = await stxGraphQL(app, link, CONFIRM_ORDER, {
-    order: toUserOrder(payload as Record<string, unknown>),
-  }, "Placed an order");
-  const b = body as { errors?: { message: string }[]; data?: { confirmOrder?: { order?: unknown; errors?: string[] } } };
-  const err = b?.errors?.[0]?.message || b?.data?.confirmOrder?.errors?.[0];
-  if (err) return c.json({ error: err }, 422);
-  return c.json((b?.data?.confirmOrder ?? b) as object, (status === 200 ? 200 : status) as never);
+  const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const { status, body } = await stxRequest(app, link, "POST", config.paths.orders, toRestOrder(payload), "Placed an order");
+  return c.json(body as object, status as never);
 });
 
-// POST /api/orders/batch?app=<id> -> place several orders at once via the
-// GraphQL `confirmOrders` batch mutation. Body: { orders: [ <flat order>, ... ] }.
+// POST /api/orders/batch?app=<id> -> place several orders via REST
+// `POST /api/v1/orders/batched`. Body: { orders: [ <flat order>, ... ] }. STX
+// returns 200 with a per-leg `results` array (`{order}` | `{errors}`); a
+// malformed body is a 400 that places nothing. Forwarded as-is.
 apiRoutes.post("/orders/batch", async (c) => {
   const app = requireApp(c);
   const link = requireLink(requireUser(c, app));
   const payload = (await c.req.json().catch(() => ({}))) as { orders?: unknown };
   const list = Array.isArray(payload.orders) ? payload.orders : [];
   if (list.length === 0) return c.json({ error: "No orders in the batch." }, 400);
-  const orders = list.map((o) => toUserOrder(o as Record<string, unknown>));
-  const { status, body } = await stxGraphQL(app, link, CONFIRM_ORDERS, { orders }, "Placed a batch of orders");
-  const b = body as { errors?: { message: string }[]; data?: { confirmOrders?: unknown } };
-  const err = b?.errors?.[0]?.message;
-  if (err) return c.json({ error: err }, 422);
-  return c.json((b?.data?.confirmOrders ?? b) as object, status as never);
+  const orders = list.map((o) => toRestOrder(o as Record<string, unknown>));
+  const { status, body } = await stxRequest(app, link, "POST", `${config.paths.orders}/batched`, { orders }, "Placed a batch of orders");
+  return c.json(body as object, status as never);
 });
 
-// DELETE /api/orders/:id?app=<id> -> cancel an order.
+// DELETE /api/orders/:id?app=<id> -> cancel an order via REST
+// `DELETE /api/v1/orders/:id` (covered by the `trade` scope). STX returns the
+// cancelled order on 200, or 404/422 with `{ error }`; forwarded as-is.
 apiRoutes.delete("/orders/:id", async (c) => {
   const app = requireApp(c);
   const link = requireLink(requireUser(c, app));
   const id = c.req.param("id");
-  const { status, body } = await stxGraphQL(app, link, CANCEL_ORDER, { id }, "Cancelled an order");
-  const b = body as { errors?: { message: string }[]; data?: { cancelOrder?: unknown } };
-  const err = b?.errors?.[0]?.message;
-  if (err) return c.json({ error: err }, 422);
-  return c.json((b?.data?.cancelOrder ?? { ok: true }) as object, status as never);
+  const { status, body } = await stxRequest(app, link, "DELETE", `${config.paths.orders}/${encodeURIComponent(id)}`, undefined, "Cancelled an order");
+  return c.json(body as object, status as never);
 });
 
 // GET /api/trades?app=<id> -> the member's fills (scope `history`).
@@ -291,31 +256,23 @@ apiRoutes.get("/trades", async (c) => {
 });
 
 // GET /api/settlements?app=<id> -> the member's settled positions (scope
-// `portfolio`), via GraphQL `mySettlementsHistory`. Mapped to the flat,
-// snake-case `{ settlements: [...] }` shape the activity UI reads.
+// `portfolio`) via REST `GET /api/v1/portfolio/settlements`. STX already
+// returns `{ settlements: [...] }` in snake_case with dollar-string money — the
+// shape the activity UI reads — so it is forwarded, normalising only the
+// timestamp key the UI expects (`settled_at`).
 apiRoutes.get("/settlements", async (c) => {
   const app = requireApp(c);
   const link = requireLink(requireUser(c, app));
-  const { status, body } = await stxGraphQL(app, link, MY_SETTLEMENTS, {}, "Loaded settlements");
-  const gq = body as {
-    data?: { mySettlementsHistory?: { settlements?: Record<string, unknown>[] } };
-  };
-  const raw = gq?.data?.mySettlementsHistory?.settlements;
-  if (Array.isArray(raw)) {
-    const settlements = raw.map((s) => ({
-      id: s.id,
-      market_id: s.marketId,
-      type: s.type,
-      quantity: s.quantity,
-      realized_pnl: s.realizedPnl,
-      settled_premium: s.settledPremium,
-      settled_risk: s.settledRisk,
-      fee: s.fee,
-      settled_at: s.insertedAtIso,
+  const { status, body } = await stxRequest(app, link, "GET", config.paths.settlements, undefined, "Loaded settlements");
+  const rest = body as { settlements?: Record<string, unknown>[] };
+  if (Array.isArray(rest?.settlements)) {
+    const settlements = rest.settlements.map((s) => ({
+      ...s,
+      settled_at: s.settled_at ?? s.inserted_at ?? s.inserted_at_iso,
     }));
     return c.json({ settlements }, 200 as never);
   }
-  // On a GraphQL error, pass the body through so the UI surfaces it.
+  // On a non-2xx (e.g. a scope or auth error), pass the body through.
   return c.json(body as object, status as never);
 });
 
@@ -326,6 +283,14 @@ apiRoutes.get("/settlements", async (c) => {
 apiRoutes.get("/stream", (c) => {
   const app = requireApp(c);
   const link = requireLink(requireUser(c, app));
+  activityStore.record({
+    ts: Date.now(),
+    appId: app.id,
+    method: "WS",
+    path: "/socket (portfolio)",
+    status: null,
+    note: "Opened live feed",
+  });
   return streamSSE(c, async (stream) => {
     let unsub: (() => void) | null = null;
     stream.onAbort(() => unsub?.());
@@ -346,6 +311,82 @@ apiRoutes.get("/stream", (c) => {
       await stream.writeSSE({ event: "ping", data: "1" }).catch(() => {});
     }
     unsub?.();
+  });
+});
+
+// GET /api/markets?app=<id>&limit= -> the PUBLIC market catalog. No member or
+// session needed; the backend attributes the read to the app with an app token
+// (client_credentials, scope market_data), fetches STX's REST
+// `GET /api/v1/markets` and reshapes it into the catalog shape the frontend
+// consumes. Replaces a direct browser call.
+apiRoutes.get("/markets", async (c) => {
+  const app = requireApp(c);
+  const limit = Math.min(Number(c.req.query("limit") ?? 500), 1000);
+  // Only OPEN markets are tradeable and have a live book — filter server-side.
+  const { status, markets } = await fetchCatalog(app, { status: ["open"], limit });
+  activityStore.record({
+    ts: Date.now(),
+    appId: app.id,
+    method: "GET",
+    path: config.paths.markets,
+    status,
+    note: status >= 200 && status < 300 ? `Loaded ${markets.length} markets` : "Market catalog failed",
+  });
+  if (status < 200 || status >= 300) {
+    return c.json({ error: "catalog_unavailable", markets: [] }, (status || 502) as never);
+  }
+  return c.json({ markets });
+});
+
+// GET /api/market-stream?app=<id>&topic=<t>&market_ids=<csv>&range=<r> -> Server-
+// Sent Events of the PUBLIC market channels. Mirrors GET /api/stream (the member
+// feed): the backend holds the app-token-authenticated STX socket (token never
+// reaches the browser) and this same-origin SSE relays what it sees. One
+// EventSource == one topic subscription. Valid topics: ticker (market-wide),
+// trades / orderbook / market_stats (a market_ids filter is required). Relayed
+// SSE events keep the Phoenix push names (book / ticker / trade / market_stats /
+// market_stats_snapshot), plus `joined` (the join reply — market_stats history)
+// and `join_error`.
+apiRoutes.get("/market-stream", (c) => {
+  const app = requireApp(c);
+  const topicRaw = c.req.query("topic") ?? "";
+  if (!(MARKET_TOPICS as readonly string[]).includes(topicRaw)) {
+    return c.json({ error: "bad_topic" }, 400);
+  }
+  const topic = topicRaw as MarketTopic;
+  const marketIds = (c.req.query("market_ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const range = c.req.query("range") ?? null;
+  // ticker is market-wide (no filter); the other three require a market.
+  if (topic !== "ticker" && marketIds.length === 0) {
+    return c.json({ error: "market_ids_required" }, 400);
+  }
+
+  activityStore.record({
+    ts: Date.now(),
+    appId: app.id,
+    method: "WS",
+    path: `/socket (${topic})`,
+    status: null,
+    note: "Opened market feed",
+  });
+
+  return streamSSE(c, async (stream) => {
+    const unsub = subscribeMarket(app, { topic, marketIds, range }, (e) => {
+      stream.writeSSE({ event: e.event, data: JSON.stringify(e.payload) }).catch(() => {});
+    });
+    stream.onAbort(() => unsub());
+    await stream.writeSSE({ event: "ready", data: "1" });
+
+    // Hold the connection open, pinging through proxies, until the client aborts.
+    while (!stream.aborted) {
+      await stream.sleep(25000);
+      if (stream.aborted) break;
+      await stream.writeSSE({ event: "ping", data: "1" }).catch(() => {});
+    }
+    unsub();
   });
 });
 

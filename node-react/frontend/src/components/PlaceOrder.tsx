@@ -7,7 +7,7 @@ import { PoweredByStx } from "./PoweredByStx";
 // exchange ticket rather than a form. It posts to the backend proxy, which
 // forwards to STX's `POST /api/v1/orders` with the member's bearer token.
 //
-// STX order body (mirrors the GraphQL `UserOrder` input): market_id, order_type
+// STX order body (`POST /api/v1/orders`): market_id, order_type
 // ("limit"|"market"), action ("buy"|"sell"), price (cents string; limit only —
 // STX rejects a price on a market order), quantity (decimal string).
 

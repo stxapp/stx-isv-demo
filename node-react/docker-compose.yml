@@ -36,9 +36,10 @@ services:
     ports:
       - "5173:5173"
     environment:
-      # The browser calls these directly, so they must be reachable from the host.
+      # The browser calls the backend directly (market data included), so it must
+      # be reachable from the host. VITE_STX_HTTP_URL is only for links that open
+      # the STX site itself (deposit, "powered by").
       VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8787}
-      VITE_STX_WS_URL: ${VITE_STX_WS_URL:-ws://localhost:4000}
       VITE_STX_HTTP_URL: ${VITE_STX_HTTP_URL:-http://localhost:4000}
     depends_on:
       - backend

@@ -1,27 +1,33 @@
-// Public STX market data — no credential of any kind.
+// STX market data — served entirely through the ISV backend now.
 //
-// Two credential-free surfaces are used, both reached by the browser directly:
+// The browser no longer talks to STX for market data. Both surfaces go through
+// the confidential backend, which attributes them to the app with an app token
+// (client_credentials, scope `market_data`) that never reaches the browser:
 //
-//   1. Catalog: POST ${VITE_STX_HTTP_URL}/api/graphql, `marketInfos` query.
-//      This query carries no `authorize` middleware on the server and is on the
-//      response-cache public allowlist, so it resolves for anonymous callers.
-//      Money fields come back as INTEGER SUBUNITS (cents); price is a float.
+//   1. Catalog: GET ${BACKEND}/api/markets (see `fetchMarkets` below). The
+//      backend fetches STX's REST `/api/v1/markets` and reshapes it into this
+//      module's `MarketSummary` shape. Money fields are INTEGER SUBUNITS
+//      (cents); `price` is a float.
 //
-//   2. Live feeds: Phoenix channels on ${VITE_STX_WS_URL}/socket — the public
-//      `ticker`, `trades`, and `orderbook` topics. These use the "dollar wire
-//      format": money and quantities are STRINGS already formatted in dollars,
-//      so they render as-is (do NOT divide by 100).
+//   2. Live feeds: Server-Sent Events from ${BACKEND}/api/market-stream (see
+//      marketFeed.ts), relaying STX's public `ticker`, `trades`, `orderbook` and
+//      `market_stats` channels. Their payloads use the "dollar wire format":
+//      money and quantities are STRINGS already formatted in dollars, so they
+//      render as-is (do NOT divide by 100).
 //
-// The catalog seeds the list; the channels keep it live.
+// The catalog seeds the list; the SSE feeds keep it live. `STX_HTTP_URL` stays
+// only for links that open the STX site itself (deposit, "powered by") — not for
+// market data.
+
+import { BACKEND, getActiveApp } from "./api";
 
 export const STX_HTTP_URL =
   import.meta.env.VITE_STX_HTTP_URL ?? "http://localhost:4000";
-export const STX_WS_URL = import.meta.env.VITE_STX_WS_URL ?? "ws://localhost:4000";
 
-// ---- Catalog (GraphQL `marketInfos`) --------------------------------------
+// ---- Catalog --------------------------------------------------------------
 
-// One market as returned by the public `marketInfos` query. Money fields are
-// integer subunits (cents); `price` is a float in [0,1].
+// One market as returned by the backend catalog (GET /api/markets). Money fields
+// are integer subunits (cents); `price` is a float in [0,1].
 export interface MarketSummary {
   marketId: string;
   symbol: string | null;
@@ -53,67 +59,23 @@ export interface MarketSummary {
   } | null;
 }
 
-const MARKET_INFOS_QUERY = `query marketInfos($input: MarketInfosInput) {
-  marketInfos(input: $input) {
-    marketId
-    symbol
-    title
-    shortTitle
-    eventId
-    eventTitle
-    eventShortTitle
-    sport
-    competition
-    status
-    price
-    maxPrice
-    lastTradedPrice
-    volume24h
-    specifier
-    statDetail {
-      propType
-      player
-      stat
-      statDisplayName
-      line
-    }
-  }
-}`;
-
-interface GraphQLResponse<T> {
-  data?: T;
-  errors?: Array<{ message: string }>;
-}
-
-// Fetches the public market catalog. `limit` bounds the list (the server treats
-// nil/0 as unlimited). Throws with a readable message on transport or GraphQL
-// errors so the caller can surface them.
+// Fetches the market catalog from the backend. `limit` bounds the list. The
+// backend narrows to OPEN markets and reshapes STX's REST response into
+// `MarketSummary`. Sends the session cookie + active app (same as every /api
+// call) so the read is attributed to the right app profile. Throws with a
+// readable message on transport errors so the caller can surface them.
 export async function fetchMarkets(limit = 500): Promise<MarketSummary[]> {
-  const res = await fetch(`${STX_HTTP_URL}/api/graphql`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      operationName: "marketInfos",
-      // Only OPEN markets are tradeable; ask STX to filter server-side so the
-      // 500-per-request cap is spent on markets we actually show.
-      query: MARKET_INFOS_QUERY,
-      variables: { input: { status: ["OPEN"], limit } },
-    }),
+  const res = await fetch(`${BACKEND}/api/markets?app=${encodeURIComponent(getActiveApp())}&limit=${limit}`, {
+    credentials: "include",
+    headers: { Accept: "application/json" },
   });
 
   if (!res.ok) {
-    throw new Error(`STX GraphQL responded ${res.status}`);
+    throw new Error(`Market catalog responded ${res.status}`);
   }
 
-  const body = (await res.json()) as GraphQLResponse<{
-    marketInfos: MarketSummary[] | null;
-  }>;
-
-  if (body.errors?.length) {
-    throw new Error(body.errors.map((e) => e.message).join("; "));
-  }
-
-  return body.data?.marketInfos ?? [];
+  const body = (await res.json()) as { markets?: MarketSummary[] };
+  return body.markets ?? [];
 }
 
 // ---- Live channel payloads (dollar wire format) ---------------------------
@@ -179,7 +141,7 @@ export interface TradeMsg {
 
 // ---- Formatting helpers ---------------------------------------------------
 
-// Integer cents -> "$X.XX". Used only for catalog (GraphQL) money; live feeds are
+// Integer cents -> "$X.XX". Used only for catalog money; live feeds are
 // already dollar strings.
 export function centsToDollars(cents: number | null | undefined): string {
   if (cents == null) return "—";

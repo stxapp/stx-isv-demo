@@ -102,44 +102,6 @@ export async function stxRequest(
   return { status: res.status, body: parsed };
 }
 
-// Authenticated GraphQL call for a linked member. Same bearer + refresh-once-on-401
-// contract as `stxRequest`, but posts a GraphQL document to `paths.graphql`. Order
-// WRITES use this: the GraphQL Authorize middleware enforces the member's OAuth
-// scopes, whereas the REST order controller's write gate assumes an API key.
-export async function stxGraphQL(
-  app: AppProfile,
-  link: AccountLink,
-  query: string,
-  variables: Record<string, unknown>,
-  label?: string,
-): Promise<StxResult> {
-  const post = (token: string) =>
-    fetch(config.stxBaseUrl + config.paths.graphql, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query, variables }),
-    });
-
-  let current = link;
-  let res = await post(current.accessToken);
-  if (res.status === 401) {
-    const refreshed = await tryRefresh(app, current);
-    if (refreshed) {
-      current = refreshed;
-      res = await post(current.accessToken);
-    }
-  }
-  const parsed = safeJson(await res.text());
-  const hadErrors = Boolean((parsed as { errors?: unknown[] })?.errors?.length);
-  const note = label ? (hadErrors ? `${label} — failed` : label) : hadErrors ? "graphql errors" : undefined;
-  logActivity(app.id, "POST", config.paths.graphql, res.status, note);
-  return { status: res.status, body: parsed };
-}
-
 function safeJson(text: string): unknown {
   if (!text) return null;
   try {

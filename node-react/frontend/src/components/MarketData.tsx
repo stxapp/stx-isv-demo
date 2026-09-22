@@ -1,31 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Socket, type Channel } from "phoenix";
+import { useEffect, useMemo, useState } from "react";
 import {
   dollars,
   fetchMarkets,
-  STX_WS_URL,
   type MarketSummary,
   type TickerUpdate,
 } from "../publicMarketData";
+import { subscribeTicker, type FeedStatus } from "../marketFeed";
 import { MarketBrowser } from "./MarketBrowser";
 import { OrderBook } from "./OrderBook";
 import { TradesFeed } from "./TradesFeed";
 
-// Public market-data browsing — no credential of any kind. The browser talks to
-// STX directly: the catalog over public GraphQL, the live feeds over public
-// Phoenix channels. Nothing here goes through the ISV backend proxy.
+// Public market-data browsing. The browser talks only to the ISV backend now:
+// the catalog over GET /api/markets, the live feeds over the backend's SSE proxy
+// (GET /api/market-stream). The backend attributes both to the app with an app
+// token; nothing here goes to STX directly.
 //
 // This container owns:
-//   - the single WebSocket to STX (shared by every child channel);
-//   - the market catalog (fetched once via `marketInfos`);
-//   - the market-wide `ticker` change feed, joined unfiltered so last prices
+//   - the market catalog (fetched once via GET /api/markets);
+//   - the market-wide `ticker` change feed, subscribed unfiltered so last prices
 //     overlay the whole list; and
 //   - the currently selected market.
 //
 // The order book and trades detail subscribe per-market (keyed by market_id) so
-// switching markets remounts them into a clean rejoin.
-
-type WsStatus = "connecting" | "open" | "error" | "closed";
+// switching markets remounts them into a clean resubscribe.
 
 export function MarketData({
   betslipIds,
@@ -34,8 +31,7 @@ export function MarketData({
   betslipIds: Set<string>;
   onToggleBetslip: (m: MarketSummary) => void;
 }) {
-  const [status, setStatus] = useState<WsStatus>("connecting");
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [status, setStatus] = useState<FeedStatus>("connecting");
 
   const [markets, setMarkets] = useState<MarketSummary[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -44,9 +40,7 @@ export function MarketData({
   const [tickers, setTickers] = useState<Record<string, TickerUpdate>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const tickerChannelRef = useRef<Channel | null>(null);
-
-  // --- Catalog (public GraphQL) ---
+  // --- Catalog (backend proxy) ---
   useEffect(() => {
     let cancelled = false;
     fetchMarkets(500)
@@ -70,28 +64,13 @@ export function MarketData({
     };
   }, []);
 
-  // --- Socket + market-wide ticker feed (public channels) ---
+  // --- Market-wide ticker feed (backend SSE proxy) ---
   useEffect(() => {
-    const sock = new Socket(`${STX_WS_URL}/socket`, {});
-    sock.onOpen(() => setStatus("open"));
-    sock.onError(() => setStatus("error"));
-    sock.onClose(() => setStatus("closed"));
-    sock.connect();
-    setSocket(sock);
-
-    const channel = sock.channel("ticker", {});
-    channel.on("ticker", (payload: TickerUpdate) => {
-      setTickers((prev) => ({ ...prev, [payload.market_id]: payload }));
-    });
-    channel.join();
-    tickerChannelRef.current = channel;
-
-    return () => {
-      channel.leave();
-      sock.disconnect();
-      tickerChannelRef.current = null;
-      setSocket(null);
-    };
+    const close = subscribeTicker(
+      (payload) => setTickers((prev) => ({ ...prev, [payload.market_id]: payload })),
+      setStatus,
+    );
+    return close;
   }, []);
 
   const selectedMarket = useMemo(
@@ -112,7 +91,6 @@ export function MarketData({
       <MarketBrowser
         markets={markets}
         tickers={tickers}
-        socket={socket}
         betslipIds={betslipIds}
         onToggle={onToggleBetslip}
         onOpenBook={setSelectedId}
@@ -138,9 +116,9 @@ export function MarketData({
                 ×
               </button>
             </div>
-            {/* key forces a clean channel rejoin when the market changes */}
-            <OrderBook key={`ob-${selectedId}`} socket={socket} marketId={selectedId!} />
-            <TradesFeed key={`tr-${selectedId}`} socket={socket} marketId={selectedId!} />
+            {/* key forces a clean resubscribe when the market changes */}
+            <OrderBook key={`ob-${selectedId}`} marketId={selectedId!} />
+            <TradesFeed key={`tr-${selectedId}`} marketId={selectedId!} />
           </div>
         </div>
       )}

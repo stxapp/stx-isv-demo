@@ -60,4 +60,8 @@ console.log(
 export default {
   port: config.port,
   fetch: app.fetch,
+  // Bun drops a response that sends nothing for 10s by default. The SSE feeds
+  // (/api/stream, /api/market-stream) sit idle between events and ping every
+  // 25s, so give them headroom; the max Bun accepts is 255s.
+  idleTimeout: 120,
 };

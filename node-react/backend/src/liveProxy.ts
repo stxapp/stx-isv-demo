@@ -69,7 +69,7 @@ async function resolveUserId(app: AppProfile, link: AccountLink): Promise<string
     "GET",
     config.paths.balance,
     undefined,
-    "Opened live feed",
+    "Resolved member id for the live feed",
   );
   if (status < 200 || status >= 300) return null;
   const uid = (body as { balance?: { user_id?: unknown } })?.balance?.user_id;

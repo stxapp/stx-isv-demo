@@ -1612,7 +1612,13 @@ code {
 .chart-leg { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text); }
 .chart-leg-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .chart-leg-val { font-size: 14px; }
-.moneyline-book { margin-top: 10px; }
+.moneyline-body { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+.moneyline-body .price-chart { margin-bottom: 0; min-width: 0; }
+.moneyline-book { margin-top: 10px; min-width: 0; }
+@media (min-width: 900px) {
+  .moneyline-body { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+  .moneyline-book { margin-top: 0; }
+}
 .moneyline-book-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
 .chart-ranges { display: flex; gap: 2px; flex: none; }
 .chart-range { border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; cursor: pointer; }

@@ -56,11 +56,11 @@ cd node-react/frontend && bun install && bun run dev
 The demo talks to an STX environment set by `STX_BASE_URL`. What works depends on
 what you configure:
 
-- **Public market data** works with only `STX_BASE_URL` pointed at a reachable
-  STX host. The market catalog and the live WebSocket feeds are credential-free,
-  so browsing markets works out of the box.
-- **Linking an STX account and trading** additionally needs a real `CLIENT_ID`
-  and `CLIENT_SECRET`: an OAuth client registered with STX for this app, whose
+- **Public market data** needs `STX_BASE_URL` plus `CLIENT_ID` and
+  `CLIENT_SECRET`: the backend mints an app token (`client_credentials`, scope
+  `market_data`) and uses it for the market catalog and the live feeds. No
+  member has to be linked to browse markets.
+- **Linking an STX account and trading** uses the same OAuth client, whose
   registered redirect URI matches `REDIRECT_URI` (`http://localhost:8787/callback`
   by default). The link flow sends the member to STX's hosted login and consent,
   so the STX host must expose the authorization endpoint. Contact STX to get a
@@ -102,8 +102,9 @@ endpoint over HTTP Basic; it is never exposed to the browser.
   activity log. Persistence is **SQLite** behind swappable store interfaces
   (`src/stores.ts`).
 - **Frontend** (`node-react/frontend`, Vite + React): the Heater member journey
-  (sign in → dual wallet → link STX → trade) plus a credential-free live
-  market-data panel using the `phoenix` npm client.
+  (sign in → dual wallet → link STX → trade) plus a live market-data panel fed
+  by the backend over SSE, which holds the app token; the browser opens no STX
+  socket and holds no credential.
 
 ### Store schema (`backend/src/stores.ts` over `backend/src/db.ts`)
 
@@ -140,16 +141,20 @@ End to end it covers:
 
 - The **authorization-code + PKCE** link flow: authorize, consent, callback,
   server-side code exchange, refresh, and revoke.
-- **Scoped REST** with `Authorization: Bearer stx_at_...`:
-  `/api/v1/account/balance`, `/api/v1/orders` (GET/POST), `/api/v1/orders/:id`
-  (DELETE), `/api/v1/me`, and `/api/v1/fills`, with per-request scope enforcement.
-- The public **market catalog** (`marketInfos` over GraphQL) and the public
-  **market-data WebSocket** (`ticker`/`trades`/`orderbook`), both credential-free.
+- **Scoped REST** with the member's `Authorization: Bearer stx_at_...`:
+  `/api/v1/account/balance`, `/api/v1/orders` (GET/POST), `/api/v1/orders/batched`
+  (POST), `/api/v1/orders/:id` (DELETE), `/api/v1/fills` and
+  `/api/v1/portfolio/settlements`, with per-request scope enforcement.
+- The member's **live portfolio feed** (orders, fills, balances) over the STX
+  WebSocket, authenticated with the same bearer.
+- **App tokens** (`grant_type=client_credentials`, scope `market_data`) for the
+  public **market catalog** (`GET /api/v1/markets`) and the public
+  **market-data WebSocket** (`ticker`/`trades`/`orderbook`/`market_stats`,
+  token on the `x-stx-oauth-token` handshake header).
 
-Today the demo uses REST for everything except the public market catalog, which
-uses a single GraphQL query (`marketInfos`). The integration direction is REST
-plus WebSockets only, so that GraphQL call will move to REST as the goal is a
-100% REST and WebSockets integration.
+The integration is REST plus WebSockets only. Tokens of both kinds stay on the
+backend; the browser talks only to this app and receives live data as
+server-sent events.
 
 Everything about the OAuth base URL, endpoint paths, scopes, and the app profile
 is env-configurable, so nothing is hard-coded.

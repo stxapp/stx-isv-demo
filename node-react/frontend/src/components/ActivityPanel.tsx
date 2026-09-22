@@ -70,8 +70,10 @@ function describe(r: ActivityRecord): string {
   if (p.includes("/account/balance")) return "Checked STX balance";
   if (p.includes("/fills")) return "Loaded trades";
   if (p.includes("/settlements")) return "Loaded settlements";
-  if (p.includes("/orders")) return r.method === "GET" ? "Loaded order history" : "Placed an order";
-  if (p.includes("/graphql")) return "Traded on STX";
+  if (p.includes("/orders")) {
+    if (r.method === "GET") return "Loaded order history";
+    return r.method === "DELETE" ? "Cancelled an order" : "Placed an order";
+  }
   return `${r.method} ${p}`;
 }
 

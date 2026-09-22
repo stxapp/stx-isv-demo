@@ -86,7 +86,7 @@ export const config = {
   port: Number(optional("PORT", "8787")),
 
   // The STX exchange this demo integrates with. Point at a preview like
-  // https://sx-xxxxx.preview.sportsxapp.com, or http://localhost:4000 locally.
+  // https://<your-stx-host>, or http://localhost:4000 locally.
   stxBaseUrl: required("STX_BASE_URL").replace(/\/+$/, ""),
 
   // The ISV app profile.
@@ -109,13 +109,14 @@ export const config = {
     authorize: optional("STX_AUTHORIZE_PATH", "/oauth/authorize"),
     token: optional("STX_TOKEN_PATH", "/oauth/token"),
     revoke: optional("STX_REVOKE_PATH", "/oauth/revoke"),
-    // GraphQL endpoint — the OAuth bearer authenticates it and Absinthe enforces
-    // scope, so order writes go here (the REST write path assumes an API key).
-    graphql: optional("STX_GRAPHQL_PATH", "/api/graphql"),
     // Cash balance for the account (scope `balance`). Identity (`/api/v1/me`,
     // scope `identity`) is a separate endpoint if you want the "who am I" view.
     balance: optional("STX_BALANCE_PATH", "/api/v1/account/balance"),
     orders: optional("STX_ORDERS_PATH", "/api/v1/orders"),
+    // Public market catalog (scope `market_data` on an app token). The market
+    // WebSocket channels (ticker/trades/orderbook/market_stats) live on the same
+    // `/socket` endpoint and are gated by the same scope.
+    markets: optional("STX_MARKETS_PATH", "/api/v1/markets"),
     // The member's fills (scope `history`) and settled positions (scope `portfolio`).
     trades: optional("STX_TRADES_PATH", "/api/v1/fills"),
     settlements: optional("STX_SETTLEMENTS_PATH", "/api/v1/portfolio/settlements"),

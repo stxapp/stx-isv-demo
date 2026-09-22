@@ -12,12 +12,12 @@ WORKDIR /fe
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend/ ./
-# Same-origin: the browser calls the backend relatively (""), and STX directly.
+# Same-origin: the browser calls the backend relatively (""). Market data is
+# served through the backend now; VITE_STX_HTTP_URL stays only for links that
+# open the STX site itself (deposit, "powered by").
 ARG VITE_STX_HTTP_URL
-ARG VITE_STX_WS_URL
 ENV VITE_BACKEND_URL="" \
-    VITE_STX_HTTP_URL=$VITE_STX_HTTP_URL \
-    VITE_STX_WS_URL=$VITE_STX_WS_URL
+    VITE_STX_HTTP_URL=$VITE_STX_HTTP_URL
 RUN npm run build
 
 # --- Stage 2: backend + static assets ---

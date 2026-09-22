@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { type Socket } from "phoenix";
 import {
   compactMoney,
   eventLabel,
@@ -30,7 +29,6 @@ function toCents(dollarStr: string | null | undefined): string | null {
 interface Props {
   markets: MarketSummary[];
   tickers: Record<string, TickerUpdate>;
-  socket: Socket | null;
   betslipIds: Set<string>;
   onToggle: (m: MarketSummary) => void;
   onOpenBook: (marketId: string) => void;
@@ -117,7 +115,6 @@ function distinct(values: (string | null)[]): string[] {
 export function MarketBrowser({
   markets,
   tickers,
-  socket,
   betslipIds,
   onToggle,
   onOpenBook,
@@ -381,18 +378,21 @@ export function MarketBrowser({
                 <span className="moneyline-title">{marketLabel(moneyPair[0])}</span>
                 <span className="tag">Money line</span>
               </div>
-              <PriceChart
-                key={`chart-${chartSeries.map((s) => s.marketId).join("-")}`}
-                socket={socket}
-                series={chartSeries}
-              />
-              <div className="moneyline-book">
-                {chartSeries[0] && (
-                  <div className="moneyline-book-head" style={{ color: chartSeries[0].color }}>
-                    {chartSeries[0].label} order book
-                  </div>
-                )}
-                <OrderBook key={`ml-${moneyPair[0].marketId}`} socket={socket} marketId={moneyPair[0].marketId} />
+              {/* Chart and book sit side by side on wide screens so the market
+                  list below stays within reach without scrolling. */}
+              <div className="moneyline-body">
+                <PriceChart
+                  key={`chart-${chartSeries.map((s) => s.marketId).join("-")}`}
+                  series={chartSeries}
+                />
+                <div className="moneyline-book">
+                  {chartSeries[0] && (
+                    <div className="moneyline-book-head" style={{ color: chartSeries[0].color }}>
+                      {chartSeries[0].label} order book
+                    </div>
+                  )}
+                  <OrderBook key={`ml-${moneyPair[0].marketId}`} marketId={moneyPair[0].marketId} />
+                </div>
               </div>
             </div>
           )}

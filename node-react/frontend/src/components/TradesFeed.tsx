@@ -1,47 +1,38 @@
 import { useEffect, useState } from "react";
-import { Socket, type Channel } from "phoenix";
 import { dollars, type TradeMsg } from "../publicMarketData";
+import { subscribeTrades } from "../marketFeed";
 
-// Live tape of executed trades for one market, from STX's public `trades` topic.
-//
-// Join carries optional `market_ids` / `event_ids` filters; we narrow to the one
-// selected market. Each "trade" push is one execution; `action` is the taker's
-// side ("buy" bought from the book, "sell" sold into it). This is a change feed —
+// Live tape of executed trades for one market, from STX's public `trades` topic
+// relayed over the backend SSE proxy. The backend narrows to the one selected
+// market. Each "trade" push is one execution; `action` is the taker's side
+// ("buy" bought from the book, "sell" sold into it). This is a change feed —
 // nothing arrives until the market trades. The most recent trade doubles as the
-// "last price". Mount with a React `key={marketId}` for a clean rejoin on switch.
+// "last price". Mount with a React `key={marketId}` for a clean resubscribe on switch.
 
 const MAX_ROWS = 25;
 
 interface Props {
-  socket: Socket | null;
   marketId: string;
 }
 
-export function TradesFeed({ socket, marketId }: Props) {
+export function TradesFeed({ marketId }: Props) {
   const [trades, setTrades] = useState<TradeMsg[]>([]);
   const [joined, setJoined] = useState(false);
 
   useEffect(() => {
-    if (!socket) return;
     setTrades([]);
     setJoined(false);
 
-    const channel: Channel = socket.channel("trades", { market_ids: [marketId] });
-
-    channel.on("trade", (t: TradeMsg) => {
-      if (t.market_id !== marketId) return;
-      setTrades((prev) => [t, ...prev].slice(0, MAX_ROWS));
+    const close = subscribeTrades(marketId, {
+      onJoined: () => setJoined(true),
+      onTrade: (t) => {
+        if (t.market_id !== marketId) return;
+        setTrades((prev) => [t, ...prev].slice(0, MAX_ROWS));
+      },
     });
 
-    channel
-      .join()
-      .receive("ok", () => setJoined(true))
-      .receive("error", () => setJoined(false));
-
-    return () => {
-      channel.leave();
-    };
-  }, [socket, marketId]);
+    return close;
+  }, [marketId]);
 
   const last = trades[0];
 

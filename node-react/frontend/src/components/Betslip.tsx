@@ -3,7 +3,7 @@ import { api, ApiError, startLink } from "../api";
 import { PoweredByStx } from "./PoweredByStx";
 
 // A betslip built by multi-selecting market cards, placed as one batch through
-// STX's confirmOrders (GraphQL). Each leg is an independent limit order with its
+// STX's batched order endpoint. Each leg is an independent limit order with its
 // own side, price and quantity; "Place N" sends them together.
 
 export interface BetslipLeg {
@@ -104,6 +104,24 @@ export function Betslip({
     setBusy(true);
     setError(null);
     setPlaced(null);
+    // Price is whole cents within the market's range; say so here rather than
+    // relaying STX's API-shaped rejection ("must be a dollar string").
+    for (const l of legs) {
+      const q = Number(l.quantity);
+      if (!Number.isInteger(q) || q <= 0) {
+        setError(`${l.label}: quantity must be a whole number of contracts.`);
+        setBusy(false);
+        return;
+      }
+      if (l.orderType === "limit") {
+        const p = Number(l.price);
+        if (!Number.isInteger(p) || p < 1 || p > maxCents(l)) {
+          setError(`${l.label}: price is in cents, a whole number from 1 to ${maxCents(l)}.`);
+          setBusy(false);
+          return;
+        }
+      }
+    }
     try {
       const orders = legs.map((l) => {
         const o: Record<string, string> = {
@@ -196,7 +214,7 @@ export function Betslip({
                   placeholder={`1–${maxCents(l)}¢`}
                   title={`Price in cents, 1 to ${maxCents(l)} ($${(maxCents(l) / 100).toFixed(2)} market)`}
                   value={l.price}
-                  onChange={(e) => patch(i, { price: e.target.value })}
+                  onChange={(e) => patch(i, { price: e.target.value.replace(/\D/g, "") })}
                 />
               )}
               <input
@@ -204,7 +222,7 @@ export function Betslip({
                 inputMode="numeric"
                 placeholder="qty"
                 value={l.quantity}
-                onChange={(e) => patch(i, { quantity: e.target.value })}
+                onChange={(e) => patch(i, { quantity: e.target.value.replace(/\D/g, "") })}
               />
             </div>
             {econ ? (

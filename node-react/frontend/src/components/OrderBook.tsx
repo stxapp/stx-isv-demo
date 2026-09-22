@@ -1,49 +1,38 @@
 import { useEffect, useState } from "react";
-import { Socket, type Channel } from "phoenix";
 import { dollars, type BookLevel, type BookSnapshot } from "../publicMarketData";
+import { subscribeOrderBook } from "../marketFeed";
 
-// Live aggregated order book for one market, from STX's public `orderbook` topic.
-//
-// Join carries a `market_ids` filter (a non-empty list is REQUIRED by the server;
-// an empty/absent list is an error, not "all markets"). Each "book" push is a
-// COMPLETE snapshot for that market_id — we replace the book wholesale, never
-// apply deltas. Mount this with a React `key={marketId}` so a market switch
-// remounts and rejoins cleanly.
+// Live aggregated order book for one market, from STX's public `orderbook` topic
+// relayed over the backend SSE proxy. The backend joins with a `market_ids`
+// filter; each "book" push is a COMPLETE snapshot for that market_id — we replace
+// the book wholesale, never apply deltas. Mount this with a React `key={marketId}`
+// so a market switch remounts and resubscribes cleanly.
 
 interface Props {
-  socket: Socket | null;
   marketId: string;
 }
 
-export function OrderBook({ socket, marketId }: Props) {
+export function OrderBook({ marketId }: Props) {
   const [book, setBook] = useState<BookSnapshot | null>(null);
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!socket) return;
     setBook(null);
     setJoined(false);
     setError(null);
 
-    const channel: Channel = socket.channel("orderbook", { market_ids: [marketId] });
-
-    channel.on("book", (payload: BookSnapshot) => {
-      // Only the selected market is subscribed, but guard anyway.
-      if (payload.market_id === marketId) setBook(payload);
+    const close = subscribeOrderBook(marketId, {
+      onJoined: () => setJoined(true),
+      onError: (reason) => setError(reason),
+      onBook: (payload) => {
+        // Only the selected market is subscribed, but guard anyway.
+        if (payload.market_id === marketId) setBook(payload);
+      },
     });
 
-    channel
-      .join()
-      .receive("ok", () => setJoined(true))
-      .receive("error", (resp: { reason?: string }) =>
-        setError(resp?.reason ?? "join failed"),
-      );
-
-    return () => {
-      channel.leave();
-    };
-  }, [socket, marketId]);
+    return close;
+  }, [marketId]);
 
   const bids = book?.bids ?? [];
   const offers = book?.offers ?? [];

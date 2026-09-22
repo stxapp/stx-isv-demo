@@ -6,6 +6,7 @@ import { Wallets } from "./components/Wallets";
 import { Connection } from "./components/Connection";
 import { LiveFeed } from "./components/LiveFeed";
 import { Betslip, type BetslipLeg } from "./components/Betslip";
+import { ActivityPanel } from "./components/ActivityPanel";
 import { MyActivity, type ActivityTab } from "./components/MyActivity";
 import { MarketData } from "./components/MarketData";
 import { PoweredByStx } from "./components/PoweredByStx";
@@ -45,7 +46,7 @@ export function App() {
   // Betslip: markets multi-selected from the cards, placed together as a batch.
   const [betslip, setBetslip] = useState<BetslipLeg[]>([]);
   const betslipIds = new Set(betslip.map((l) => l.marketId));
-  const [view, setView] = useState<"home" | ActivityTab>("home");
+  const [view, setView] = useState<"home" | "api" | ActivityTab>("home");
 
   function toggleBetslip(m: MarketSummary) {
     setBetslip((cur) => {
@@ -213,6 +214,13 @@ export function App() {
                   {NAV_LABEL[v]}
                 </button>
               ))}
+            <button
+              type="button"
+              className={`nav-item${view === "api" ? " active" : ""}`}
+              onClick={() => setView("api")}
+            >
+              API calls
+            </button>
           </nav>
         )}
         <div className="topbar-right">
@@ -289,6 +297,14 @@ export function App() {
             )}
           </aside>
         </div>
+      ) : view === "api" ? (
+        <section className="page">
+          <div className="section-head">
+            <h2>API calls</h2>
+            <span className="muted">Every request this app's backend made to STX, newest first.</span>
+          </div>
+          <ActivityPanel refreshKey={refreshKey} embedded />
+        </section>
       ) : me?.user && linked ? (
         <section className="page">
           <div className="section-head">

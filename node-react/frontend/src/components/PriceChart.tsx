@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { type Socket } from "phoenix";
+import { subscribeMarketStats } from "../marketFeed";
 
 // A price-history chart for a money-line's two sides, fed by STX's public
-// `market_stats` channel. A money line is two markets (one per outcome, e.g.
+// `market_stats` channel relayed over the backend SSE proxy. A money line is two
+// markets (one per outcome, e.g.
 // DET and CHW), each with its own book and its own `price_percent` series, so
 // the chart draws one line per side — the STX site's two-line view. The whole
 // history arrives in the join reply, then changed buckets (and full snapshots)
@@ -31,10 +32,6 @@ interface RawPoint {
   timestamp_us?: number | string;
   price_percent?: number | string;
 }
-interface StatsMarket {
-  market_id?: string;
-  points?: RawPoint[];
-}
 
 function parse(pts: RawPoint[] | undefined): Point[] {
   return (pts ?? [])
@@ -44,11 +41,9 @@ function parse(pts: RawPoint[] | undefined): Point[] {
 }
 
 export function PriceChart({
-  socket,
   series,
   title,
 }: {
-  socket: Socket | null;
   series: ChartSeries[];
   title?: string;
 }) {
@@ -62,39 +57,38 @@ export function PriceChart({
 
   useEffect(() => {
     const ids = idsKey ? idsKey.split(",") : [];
-    if (!socket || ids.length === 0) return;
+    if (ids.length === 0) return;
     setByMarket({});
     setStatus("connecting");
 
-    const ch = socket.channel("market_stats", { market_ids: ids, range });
-
-    ch.on("market_stats_snapshot", (pl: StatsMarket) => {
-      if (pl.market_id) setByMarket((prev) => ({ ...prev, [pl.market_id as string]: parse(pl.points) }));
-    });
-    ch.on("market_stats", (pl: StatsMarket) => {
-      if (!pl.market_id) return;
-      const fresh = parse(pl.points);
-      setByMarket((prev) => {
-        const cur = prev[pl.market_id as string] ?? [];
-        const map = new Map(cur.map((x) => [x.t, x]));
-        for (const f of fresh) map.set(f.t, f);
-        return { ...prev, [pl.market_id as string]: [...map.values()].sort((a, b) => a.t - b.t) };
-      });
-    });
-
-    ch.join()
-      .receive("ok", (resp: { markets?: StatsMarket[] }) => {
+    const close = subscribeMarketStats(ids, range, {
+      // The join reply seeds the whole history.
+      onSeed: (markets) => {
         const next: Record<string, Point[]> = {};
-        for (const m of resp?.markets ?? []) if (m.market_id) next[m.market_id] = parse(m.points);
+        for (const m of markets) if (m.market_id) next[m.market_id] = parse(m.points);
         setByMarket(next);
         setStatus("ok");
-      })
-      .receive("error", () => setStatus("error"));
+      },
+      // A snapshot replaces that market's series wholesale.
+      onSnapshot: (pl) => {
+        if (pl.market_id) setByMarket((prev) => ({ ...prev, [pl.market_id as string]: parse(pl.points) }));
+      },
+      // A delta upserts changed buckets by timestamp.
+      onDelta: (pl) => {
+        if (!pl.market_id) return;
+        const fresh = parse(pl.points);
+        setByMarket((prev) => {
+          const cur = prev[pl.market_id as string] ?? [];
+          const map = new Map(cur.map((x) => [x.t, x]));
+          for (const f of fresh) map.set(f.t, f);
+          return { ...prev, [pl.market_id as string]: [...map.values()].sort((a, b) => a.t - b.t) };
+        });
+      },
+      onStatus: (s) => setStatus(s === "error" ? "error" : s === "open" ? "ok" : "connecting"),
+    });
 
-    return () => {
-      ch.leave();
-    };
-  }, [socket, idsKey, range]);
+    return close;
+  }, [idsKey, range]);
 
   const geom = useMemo(() => {
     const W = 600;
