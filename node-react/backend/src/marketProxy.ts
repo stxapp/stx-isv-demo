@@ -22,6 +22,7 @@
 
 import { config, type AppProfile } from "./config";
 import { appToken, freshAppToken } from "./appToken";
+import { backoffDelayMs } from "./backoff";
 
 export type MarketTopic = "ticker" | "trades" | "orderbook" | "market_stats";
 
@@ -60,6 +61,8 @@ interface Conn {
   reconnect: ReturnType<typeof setTimeout> | null;
   ref: number;
   joinRef: string | null;
+  // Consecutive reconnects without a successful join; drives the backoff.
+  attempts: number;
   torn: boolean;
 }
 
@@ -135,6 +138,7 @@ function connect(conn: Conn, fresh = false): void {
         // The join reply. For market_stats it carries the price-history seed
         // (`markets: [...]`); for the others an ack. Relay it as `joined`.
         const p = payload as { status?: string; response?: unknown };
+        if (p?.status === "ok") conn.attempts = 0;
         emit(conn, {
           event: p?.status === "ok" ? "joined" : "join_error",
           payload: p?.response ?? {},
@@ -169,12 +173,14 @@ function connect(conn: Conn, fresh = false): void {
 
 // Reconnect while anyone is still listening (token rotated / STX blip). Always
 // re-mints a fresh token — never reuse the token from the socket that dropped.
+// Paced by backoff.ts so an STX outage is retried at a falling rate, not on a
+// fixed timer per subscription.
 function scheduleReconnect(conn: Conn): void {
   if (conn.torn || conn.listeners.size === 0 || conn.reconnect) return;
   conn.reconnect = setTimeout(() => {
     conn.reconnect = null;
     if (!conn.torn && conn.listeners.size > 0) connect(conn, true);
-  }, 2000);
+  }, backoffDelayMs(conn.attempts++));
 }
 
 function teardown(conn: Conn): void {
@@ -205,6 +211,7 @@ export function subscribeMarket(
     reconnect: null,
     ref: 0,
     joinRef: null,
+    attempts: 0,
     torn: false,
   };
   connect(conn);

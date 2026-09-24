@@ -16,6 +16,7 @@
 // The socket speaks the Phoenix v2 wire protocol directly (a JSON array
 // [join_ref, ref, topic, event, payload]); no phoenix client dependency.
 
+import { backoffDelayMs } from "./backoff";
 import { config, type AppProfile } from "./config";
 import { stxRequest, type StxResult } from "./stxClient";
 import { type AccountLink } from "./stores";
@@ -37,6 +38,8 @@ interface Conn {
   heartbeat: ReturnType<typeof setInterval> | null;
   reconnect: ReturnType<typeof setTimeout> | null;
   ref: number;
+  // Consecutive reconnects without a successful join; drives the backoff.
+  attempts: number;
   torn: boolean;
 }
 
@@ -107,6 +110,8 @@ function connect(conn: Conn): void {
     if (!Array.isArray(frame)) return;
     const [, , topic, event, payload] = frame as [unknown, unknown, string, string, unknown];
     if (typeof topic !== "string" || typeof event !== "string") return;
+    // A successful join ends the reconnect streak; the next drop starts from 1s.
+    if (event === "phx_reply" && (payload as { status?: string })?.status === "ok") conn.attempts = 0;
     // Skip protocol control frames (phx_reply/phx_error/phx_close).
     if (event.startsWith("phx_")) return;
     const kind = kindOf(topic);
@@ -121,12 +126,13 @@ function connect(conn: Conn): void {
       conn.heartbeat = null;
     }
     conn.ws = null;
-    // Reconnect while anyone is still listening (e.g. token rotated / STX blip).
+    // Reconnect while anyone is still listening (e.g. token rotated / STX blip),
+    // paced by backoff.ts so an STX outage is retried at a falling rate.
     if (!conn.torn && conn.listeners.size > 0 && !conn.reconnect) {
       conn.reconnect = setTimeout(() => {
         conn.reconnect = null;
         if (!conn.torn && conn.listeners.size > 0) connect(conn);
-      }, 2000);
+      }, backoffDelayMs(conn.attempts++));
     }
   };
   ws.addEventListener("close", drop);
@@ -171,6 +177,7 @@ export async function subscribe(
       heartbeat: null,
       reconnect: null,
       ref: 0,
+      attempts: 0,
       torn: false,
     };
     conns.set(userId, conn);
