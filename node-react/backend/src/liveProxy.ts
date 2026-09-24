@@ -8,10 +8,10 @@
 // to that member's browser tabs over SSE (see GET /api/stream).
 //
 // Topics (STX dollar-string OAuth vocabulary, gated by the member's scopes):
-//   balances:<uid>  -> "update" | "payment_update"   (needs `balance`)
-//   fills:<uid>     -> "trade"                         (needs `history`)
-//   orders:<uid>    -> "new_open_order"                (needs `history`)
-//   positions:<uid> -> "updated_positions"            (needs `portfolio`)
+//   balances:<uid>  -> "update" | "payment_update"   (needs `balance.read`)
+//   fills:<uid>     -> "trade"                         (needs `orders.read`)
+//   orders:<uid>    -> "new_open_order"                (needs `orders.read`)
+//   positions:<uid> -> "updated_positions"            (needs `portfolio.read`)
 //
 // The socket speaks the Phoenix v2 wire protocol directly (a JSON array
 // [join_ref, ref, topic, event, payload]); no phoenix client dependency.
@@ -64,7 +64,7 @@ function kindOf(topic: string): LiveEvent["kind"] | null {
 }
 
 // Resolve the member's STX user id (the topic suffix). The balance endpoint
-// returns it and needs only the `balance` scope; `GET /api/v1/me` 500s for OAuth.
+// returns it and needs only the `balance.read` scope; `GET /api/v1/me` 500s for OAuth.
 async function resolveUserId(app: AppProfile, link: AccountLink): Promise<string | null> {
   const { status, body }: StxResult = await stxRequest(
     app,

@@ -17,7 +17,7 @@ process.env.STX_BASE_URL = "https://stx.example.com";
 process.env.CLIENT_ID = "stx_client_HEATER";
 process.env.CLIENT_SECRET = "stx_secret_HEATER";
 process.env.REDIRECT_URI = "http://localhost:8787/callback";
-process.env.OAUTH_SCOPES = "identity balance portfolio history trade";
+process.env.OAUTH_SCOPES = "profile.read balance.read portfolio.read orders.read orders.write";
 process.env.DB_PATH = ":memory:";
 
 const { db } = await import("./db");
@@ -93,12 +93,12 @@ describe("linkStore — the STX grant linked to a user", () => {
       accessToken: "stx_at_1",
       refreshToken: "stx_rt_1",
       accessExpiresAt: 123,
-      scopes: ["identity", "balance", "trade"],
+      scopes: ["profile.read", "balance.read", "orders.write"],
     });
     const link = linkStore.get(uid);
     expect(link?.accessToken).toBe("stx_at_1");
     expect(link?.refreshToken).toBe("stx_rt_1");
-    expect(link?.scopes).toEqual(["identity", "balance", "trade"]);
+    expect(link?.scopes).toEqual(["profile.read", "balance.read", "orders.write"]);
     expect(link?.linkedAt).toBeGreaterThan(0);
   });
 
@@ -110,7 +110,7 @@ describe("linkStore — the STX grant linked to a user", () => {
       accessToken: "stx_at_1",
       refreshToken: "stx_rt_1",
       accessExpiresAt: null,
-      scopes: ["trade"],
+      scopes: ["orders.write"],
     });
     const first = linkStore.get(uid)!;
     // Rotate: new access/refresh, no linkedAt passed.
@@ -120,7 +120,7 @@ describe("linkStore — the STX grant linked to a user", () => {
       accessToken: "stx_at_2",
       refreshToken: "stx_rt_2",
       accessExpiresAt: 999,
-      scopes: ["trade"],
+      scopes: ["orders.write"],
     });
     const rotated = linkStore.get(uid)!;
     expect(rotated.accessToken).toBe("stx_at_2");
@@ -136,7 +136,7 @@ describe("linkStore — the STX grant linked to a user", () => {
       accessToken: "stx_at_1",
       refreshToken: null,
       accessExpiresAt: null,
-      scopes: ["trade"],
+      scopes: ["orders.write"],
     });
     linkStore.delete(uid);
     expect(linkStore.get(uid)).toBeNull();

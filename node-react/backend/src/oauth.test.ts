@@ -12,7 +12,7 @@ process.env.STX_BASE_URL = "https://stx.example.com";
 process.env.CLIENT_ID = "stx_client_HEATER";
 process.env.CLIENT_SECRET = "stx_secret_HEATER";
 process.env.REDIRECT_URI = "http://localhost:8787/callback";
-process.env.OAUTH_SCOPES = "identity balance portfolio history trade";
+process.env.OAUTH_SCOPES = "profile.read balance.read portfolio.read orders.read orders.write";
 // The `config` singleton is shared across test files in one process; this env
 // block matches stores.test.ts (incl. DB_PATH) so whichever loads it first,
 // both see the same profile and an in-memory DB.
@@ -70,7 +70,7 @@ describe("authorize URL builder", () => {
     expect(p.get("redirect_uri")).toBe("http://localhost:8787/callback");
     // Space-delimited scope (URLSearchParams encodes the spaces on the wire;
     // .get() decodes them back).
-    expect(p.get("scope")).toBe("identity balance portfolio history trade");
+    expect(p.get("scope")).toBe("profile.read balance.read portfolio.read orders.read orders.write");
     expect(p.get("code_challenge")).toBe("chal-abc");
     expect(p.get("code_challenge_method")).toBe("S256");
     expect(p.get("state")).toBe("st-123");
@@ -115,13 +115,13 @@ describe("token response parser", () => {
       refresh_token: "stx_rt_BBB",
       token_type: "bearer",
       expires_in: 3600,
-      scope: "identity balance trade",
+      scope: "profile.read balance.read orders.write",
     });
     expect(parsed.access_token).toBe("stx_at_AAA");
     expect(parsed.refresh_token).toBe("stx_rt_BBB");
     expect(parsed.token_type).toBe("bearer");
     expect(parsed.expires_in).toBe(3600);
-    expect(parsed.scope).toBe("identity balance trade");
+    expect(parsed.scope).toBe("profile.read balance.read orders.write");
   });
 
   test("access_token alone is valid; optional fields are dropped when absent", () => {

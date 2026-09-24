@@ -74,7 +74,7 @@ const heater: AppProfile = {
   clientId: required("CLIENT_ID"),
   clientSecret: required("CLIENT_SECRET"),
   redirectUri: required("REDIRECT_URI"),
-  scopes: optional("OAUTH_SCOPES", "identity balance portfolio history trade"),
+  scopes: optional("OAUTH_SCOPES", "profile.read balance.read portfolio.read orders.read orders.write"),
   enabled: true,
   startingWalletCents: parseCents("APP_WALLET_CENTS", 25_000), // $250.00
 };
@@ -101,23 +101,23 @@ export const config = {
   // exchange. Overridable so the demo is not tied to one server's routing.
   //
   // The real STX scope vocabulary is exactly:
-  //   identity balance portfolio history transfers trade onboarding
+  //   profile.read balance.read portfolio.read orders.read transfers.read orders.write terms.write
   // STX narrows the request to the intersection of the client's registered
   // scopes and what the member consents to. No scope moves money (deposits /
-  // withdrawals / transfers are never delegable; `transfers` is read-only).
+  // withdrawals / transfers are never delegable; `transfers.read` is read-only).
   paths: {
     authorize: optional("STX_AUTHORIZE_PATH", "/oauth/authorize"),
     token: optional("STX_TOKEN_PATH", "/oauth/token"),
     revoke: optional("STX_REVOKE_PATH", "/oauth/revoke"),
-    // Cash balance for the account (scope `balance`). Identity (`/api/v1/me`,
-    // scope `identity`) is a separate endpoint if you want the "who am I" view.
+    // Cash balance for the account (scope `balance.read`). Identity (`/api/v1/me`,
+    // scope `profile.read`) is a separate endpoint if you want the "who am I" view.
     balance: optional("STX_BALANCE_PATH", "/api/v1/account/balance"),
     orders: optional("STX_ORDERS_PATH", "/api/v1/orders"),
     // Public market catalog (scope `market_data` on an app token). The market
     // WebSocket channels (ticker/trades/orderbook/market_stats) live on the same
     // `/socket` endpoint and are gated by the same scope.
     markets: optional("STX_MARKETS_PATH", "/api/v1/markets"),
-    // The member's fills (scope `history`) and settled positions (scope `portfolio`).
+    // The member's fills (scope `orders.read`) and settled positions (scope `portfolio.read`).
     trades: optional("STX_TRADES_PATH", "/api/v1/fills"),
     settlements: optional("STX_SETTLEMENTS_PATH", "/api/v1/portfolio/settlements"),
   },

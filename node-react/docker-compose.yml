@@ -18,7 +18,7 @@ services:
       CLIENT_ID: ${CLIENT_ID}
       CLIENT_SECRET: ${CLIENT_SECRET}
       REDIRECT_URI: ${REDIRECT_URI}
-      OAUTH_SCOPES: ${OAUTH_SCOPES:-identity balance portfolio history trade}
+      OAUTH_SCOPES: ${OAUTH_SCOPES:-profile.read balance.read portfolio.read orders.read orders.write}
       APP_ID: ${APP_ID:-heater}
       APP_NAME: ${APP_NAME:-Heater}
       APP_TAGLINE: ${APP_TAGLINE:-Fantasy sports, powered by the STX exchange.}

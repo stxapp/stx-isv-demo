@@ -79,14 +79,14 @@ endpoint over HTTP Basic; it is never exposed to the browser.
   (not against a bare session), so the link persists across reconnection. The
   browser only ever holds an opaque session cookie.
 - **Dual wallet.** `Heater Wallet` (authoritative, held here) + `STX Wallet`
-  (fetched live from STX via the link, scope `balance`) + `Combined`. The
+  (fetched live from STX via the link, scope `balance.read`) + `Combined`. The
   combined total is shown only when the STX cash amount can be parsed from STX's
   balance response; otherwise the raw STX response is shown and no total is
   invented. STX funds are always labelled as held at STX.
 - **Scoped, money-safe.** Heater requests only the scopes it needs from STX's
-  vocabulary (`identity balance portfolio history transfers trade onboarding`;
-  the demo defaults to `identity balance portfolio history trade`). STX narrows
-  them to what the member consents to. **No scope moves money** - `transfers` is
+  vocabulary (`profile.read balance.read portfolio.read orders.read transfers.read orders.write terms.write`;
+  the demo defaults to `profile.read balance.read portfolio.read orders.read orders.write`). STX narrows
+  them to what the member consents to. **No scope moves money** - `transfers.read` is
   read-only history; deposits/withdrawals are never delegable.
 - **Unlink / revoke.** Unlinking clears the local grant and best-effort revokes
   the token at STX, so access ends immediately rather than at token expiry. The
@@ -134,7 +134,7 @@ endpoint over HTTP Basic; it is never exposed to the browser.
 
 This backend is wired to STX's **real** OAuth contract, not a generic one:
 `client_secret_basic` at the token endpoint, opaque `stx_at_`/`stx_rt_` tokens,
-the `identity balance portfolio history transfers trade onboarding` scope
+the `profile.read balance.read portfolio.read orders.read transfers.read orders.write terms.write` scope
 vocabulary, and the real REST paths and order body.
 
 End to end it covers:

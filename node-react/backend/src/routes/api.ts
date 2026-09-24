@@ -132,7 +132,7 @@ apiRoutes.get("/me", (c) => {
 
 // GET /api/wallet?app=<id> — the dual-wallet view: the ISV app's OWN wallet
 // (authoritative, held here) alongside the STX cash balance (fetched live from
-// STX via the link, scope `balance`). Combined total is shown only when the STX
+// STX via the link, scope `balance.read`). Combined total is shown only when the STX
 // cash amount can be parsed confidently — otherwise the raw STX body is
 // returned and the frontend omits the total rather than inventing one.
 apiRoutes.get("/wallet", async (c) => {
@@ -211,7 +211,7 @@ apiRoutes.get("/orders", async (c) => {
 });
 
 // POST /api/orders?app=<id> -> place an order via REST `POST /api/v1/orders`.
-// The OAuth bearer carries the member's `trade` scope; STX returns its own
+// The OAuth bearer carries the member's `orders.write` scope; STX returns its own
 // status (2xx on placement, 422 with `{ error }` on rejection), forwarded as-is.
 apiRoutes.post("/orders", async (c) => {
   const app = requireApp(c);
@@ -237,7 +237,7 @@ apiRoutes.post("/orders/batch", async (c) => {
 });
 
 // DELETE /api/orders/:id?app=<id> -> cancel an order via REST
-// `DELETE /api/v1/orders/:id` (covered by the `trade` scope). STX returns the
+// `DELETE /api/v1/orders/:id` (covered by the `orders.write` scope). STX returns the
 // cancelled order on 200, or 404/422 with `{ error }`; forwarded as-is.
 apiRoutes.delete("/orders/:id", async (c) => {
   const app = requireApp(c);
@@ -247,7 +247,7 @@ apiRoutes.delete("/orders/:id", async (c) => {
   return c.json(body as object, status as never);
 });
 
-// GET /api/trades?app=<id> -> the member's fills (scope `history`).
+// GET /api/trades?app=<id> -> the member's fills (scope `orders.read`).
 apiRoutes.get("/trades", async (c) => {
   const app = requireApp(c);
   const link = requireLink(requireUser(c, app));
