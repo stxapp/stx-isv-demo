@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useLiveAccount } from "../liveAccount";
 import { fetchMarkets, marketDisplayLabel, type MarketSummary } from "../publicMarketData";
 import { Orders } from "./Orders";
 import { RecordsPanel, txt, priceCents, money, shortId, timeOf } from "./RecordsPanel";
@@ -26,6 +27,8 @@ export function MyActivity({
   activeTab?: ActivityTab;
 }) {
   const [internalTab, setInternalTab] = useState<ActivityTab>("orders");
+  // Fills pushed on the member's socket, merged over the REST trades page.
+  const { fills: liveFills } = useLiveAccount();
   const tab = activeTab ?? internalTab;
 
   // market_id -> display name, from the public catalog (loaded once).
@@ -75,6 +78,7 @@ export function MyActivity({
             fetcher={api.trades}
             keys={["fills", "trades"]}
             refreshKey={refreshKey}
+            live={liveFills}
             what="your trades"
             empty="No trades yet."
             summarize={(t) => {

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "../api";
+import { mergeById } from "../liveAccount";
 import { NotConnected } from "./NotConnected";
 
 // A generic read-only list of STX records (trades, settlements, …). Tolerant of
 // the response envelope and schema: it pulls an array out of the common shapes
 // and renders each row as a compact summary with the full JSON behind a toggle,
-// so an unfamiliar field never breaks the layout.
+// so an unfamiliar field never breaks the layout. `live` rows (fills pushed on
+// the member's socket) are merged over the REST page by id, so the list moves
+// without a refetch; `refreshKey` reloads the REST page (after a reconnect).
 type Row = Record<string, unknown>;
 
 function rowsFrom(payload: unknown, keys: string[]): Row[] {
@@ -26,6 +29,7 @@ export function RecordsPanel({
   summarize,
   empty,
   what,
+  live,
 }: {
   fetcher: () => Promise<unknown>;
   keys: string[];
@@ -33,6 +37,7 @@ export function RecordsPanel({
   summarize: (row: Row) => React.ReactNode;
   empty: string;
   what?: string;
+  live?: Row[];
 }) {
   const [payload, setPayload] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +59,8 @@ export function RecordsPanel({
 
   useEffect(load, [load, refreshKey]);
 
-  const allRows = rowsFrom(payload, keys);
+  const restRows = rowsFrom(payload, keys);
+  const allRows = live && live.length ? mergeById(restRows, live) : restRows;
   const MAX = 12;
   const rows = allRows.slice(0, MAX);
 

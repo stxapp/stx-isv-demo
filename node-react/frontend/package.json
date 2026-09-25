@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Vite + React frontend for the STX ISV integration demo.",
+  "description": "Sideline: STX sample app (frontend). Sideline is a fictional sports app used to demonstrate building on STX; it is not a real product or company.",
   "scripts": {
     "dev": "vite --host",
     "build": "tsc -b && vite build",

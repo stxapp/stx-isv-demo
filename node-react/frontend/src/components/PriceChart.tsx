@@ -5,7 +5,7 @@ import { subscribeMarketStats } from "../marketFeed";
 // `market_stats` channel relayed over the backend SSE proxy. A money line is two
 // markets (one per outcome, e.g.
 // DET and CHW), each with its own book and its own `price_percent` series, so
-// the chart draws one line per side — the STX site's two-line view. The whole
+// the chart draws one line per side: the STX site's two-line view. The whole
 // history arrives in the join reply, then changed buckets (and full snapshots)
 // stream in. `price_percent` is a rescaled price (0–100), read as the market's
 // implied probability. Switching range rejoins.

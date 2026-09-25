@@ -1,13 +1,37 @@
 import { useEffect, useRef, useState } from "react";
-import { api, startLink, type PublicApp, type WalletState } from "../api";
-import { compactMoney, moneyTitle } from "../publicMarketData";
+import { api, type PublicApp, type WalletState } from "../api";
+import { LinkStxButton } from "./LinkStx";
+import { useLiveAccount } from "../liveAccount";
+import { formatMoney } from "../publicMarketData";
 
-// The dual-wallet view, compact: the ISV app's OWN wallet (held here, the demo's
-// mock balance) alongside the STX cash balance (real, fetched live via the link),
-// plus a combined total when the STX cash amount can be parsed. When the STX
-// balance changes (e.g. an order fills and the live feed nudges a refetch) the
-// amount flashes, so the real-time change is visible. Deposit lives in the
-// header now; funds are added at STX, never touched by the ISV.
+// The dual wallet: the ISV app's OWN wallet (held here, the demo's mock balance)
+// and the STX cash balance (real, pushed live over the member's STX socket), plus
+// a combined total when the STX cash amount can be parsed. The STX side comes
+// from the live feed, so trading makes no balance call; /api/wallet only supplies
+// the app wallet (and the STX balance over REST if the live feed could not open).
+// Deposit lives in the header; funds are added at STX, never touched by the ISV.
+//
+// Every amount is shown in full, "$100,000.00": a wallet never abbreviates.
+// When the STX balance moves, a chip beside it says by how much ("▼ $24.75" in
+// red, "▲ $12.40" in green) for four seconds, and the amount pulses once in the
+// same colour. With reduced motion the chip and colour still show, without the
+// animation.
+
+// STX dollar string ("12.3400") to whole cents, or null.
+function toCents(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+// How long the balance-change chip stays up.
+const CHIP_MS = 4000;
+
+interface Change {
+  id: number;
+  dir: "up" | "down";
+  cents: number;
+}
 
 export function Wallets({
   app,
@@ -21,114 +45,105 @@ export function Wallets({
   const [wallet, setWallet] = useState<WalletState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  // The signed change on the last STX-balance update, shown as a floating chip so
-  // a real-time credit/debit is unmissable, not just a colour blip.
-  const [delta, setDelta] = useState<{ text: string; dir: "up" | "down"; id: number } | null>(null);
-  const prevCash = useRef<string | null | undefined>(undefined);
-  const prevCashNum = useRef<number | null>(null);
-  const deltaId = useRef(0);
+  const [change, setChange] = useState<Change | null>(null);
+  const prevCents = useRef<number | null | undefined>(undefined);
+  const changeId = useRef(0);
+
+  const liveAccount = useLiveAccount();
+  // The live feed carries the balance unless it failed to open.
+  const useLive = linked && !liveAccount.failed;
 
   useEffect(() => {
     let alive = true;
     setError(null);
     api
-      .wallet()
+      .wallet(useLive)
       .then((w) => alive && setWallet(w))
       .catch((e) => alive && setError(String(e)));
     return () => {
       alive = false;
     };
-  }, [refreshKey, linked]);
+  }, [refreshKey, linked, useLive]);
 
-  // When the STX balance changes (not on first load), pulse the amount in the
-  // direction of the change and float a +/− delta chip.
-  useEffect(() => {
-    const cash = wallet?.stx.cashDollars ?? null;
-    const cashNum = cash != null ? parseFloat(cash) : null;
-    if (prevCash.current !== undefined && cash !== prevCash.current && wallet?.stx.linked) {
-      const prev = prevCashNum.current;
-      const diff = prev != null && cashNum != null ? cashNum - prev : null;
-      const dir: "up" | "down" = diff != null && diff < 0 ? "down" : "up";
-      setFlash(dir);
-      if (diff != null && Math.abs(diff) >= 0.005) {
-        deltaId.current += 1;
-        setDelta({
-          text: `${diff > 0 ? "+" : "−"}${compactMoney(String(Math.abs(diff)))}`,
-          dir,
-          id: deltaId.current,
-        });
-      }
-    }
-    prevCash.current = cash;
-    if (cashNum != null && Number.isFinite(cashNum)) prevCashNum.current = cashNum;
-  }, [wallet]);
-  useEffect(() => {
-    if (!flash) return;
-    const t = setTimeout(() => setFlash(null), 1300);
-    return () => clearTimeout(t);
-  }, [flash]);
-  useEffect(() => {
-    if (!delta) return;
-    const t = setTimeout(() => setDelta(null), 2400);
-    return () => clearTimeout(t);
-  }, [delta]);
-
+  // The STX cash: the live balance when the feed has one, else what
+  // /api/wallet answered.
+  const liveCents = useLive ? toCents(liveAccount.balance?.available_balance) : null;
+  const cashCents = liveCents ?? wallet?.stx.cashCents ?? null;
+  const appCents = wallet?.isv.walletCents ?? null;
+  const combinedCents = appCents !== null && cashCents !== null ? appCents + cashCents : null;
+  const rawBalance = liveCents !== null ? { balance: liveAccount.balance } : wallet?.stx.balance;
   const stxLinked = linked && wallet?.stx.linked;
 
+  // When the STX balance changes (not on first load), show the signed change.
+  useEffect(() => {
+    const prev = prevCents.current;
+    prevCents.current = cashCents;
+    if (prev == null || cashCents == null || prev === cashCents || !stxLinked) return;
+    changeId.current += 1;
+    setChange({ id: changeId.current, dir: cashCents < prev ? "down" : "up", cents: Math.abs(cashCents - prev) });
+  }, [cashCents, stxLinked]);
+  useEffect(() => {
+    if (!change) return;
+    const t = setTimeout(() => setChange(null), CHIP_MS);
+    return () => clearTimeout(t);
+  }, [change]);
+
   return (
-    <div className="card wallets wallets-compact">
+    <div className="card wallets">
       {error && <p className="error">{error}</p>}
 
-      <div className="wallet-row">
-        <div className="wallet wallet-heater" style={{ borderColor: app.brandColor }}>
-          <span className="wallet-label" style={{ color: app.brandColor }}>{app.name}</span>
-          <span className="wallet-amount" title={moneyTitle(wallet?.heater.walletDollars)}>
-            {wallet ? compactMoney(wallet.heater.walletDollars) : "—"}
-          </span>
+      <dl className="wallet-list">
+        <div className="wallet-line">
+          <dt>
+            <span className="wallet-dot" style={{ background: app.brandColor }} aria-hidden="true" />
+            {app.name} wallet
+          </dt>
+          <dd className="wallet-amount">{wallet ? formatMoney(wallet.isv.walletDollars) : "–"}</dd>
         </div>
 
-        <span className="wallet-op">+</span>
-
-        <div className={`wallet wallet-stx${flash ? ` pulse pulse-${flash}` : ""}`}>
-          {delta && (
-            <span key={delta.id} className={`wallet-delta wallet-delta-${delta.dir}`}>
-              {delta.dir === "up" ? "▲" : "▼"} {delta.text}
-            </span>
-          )}
-          <span className="wallet-label">STX</span>
+        <div className={`wallet-line wallet-line-stx${change ? ` moved moved-${change.dir}` : ""}`}>
+          <dt>
+            <span className="wallet-dot wallet-dot-stx" aria-hidden="true" />
+            STX balance
+          </dt>
           {stxLinked ? (
-            <span
-              className={`wallet-amount${flash ? ` flash flash-${flash}` : ""}`}
-              title={moneyTitle(wallet?.stx.cashDollars)}
-            >
-              {compactMoney(wallet?.stx.cashDollars)}
-            </span>
+            <dd className="wallet-amount-wrap">
+              {change && (
+                <span
+                  key={change.id}
+                  className={`balance-chip balance-chip-${change.dir}`}
+                  role="status"
+                  aria-label={`STX balance ${change.dir === "down" ? "down" : "up"} ${formatMoney(change.cents / 100)}`}
+                >
+                  <span aria-hidden="true">{change.dir === "down" ? "▼" : "▲"}</span>
+                  {formatMoney(change.cents / 100)}
+                </span>
+              )}
+              <span key={change?.id ?? 0} className={`wallet-amount${change ? ` pulse-${change.dir}` : ""}`}>
+                {cashCents !== null ? formatMoney(cashCents / 100) : "–"}
+              </span>
+            </dd>
           ) : (
-            <button className="link wallet-link" onClick={startLink}>
-              Link STX
-            </button>
+            <dd className="wallet-unlinked">Not linked</dd>
           )}
         </div>
 
-        <span className="wallet-op">=</span>
-
-        <div className="wallet wallet-total">
-          <span className="wallet-label">Combined</span>
-          <span className="wallet-amount" title={moneyTitle(wallet?.combinedDollars)}>
-            {wallet?.combinedDollars ? compactMoney(wallet.combinedDollars) : "—"}
-          </span>
+        <div className="wallet-line wallet-line-total">
+          <dt>Combined</dt>
+          <dd className="wallet-amount">{combinedCents !== null && stxLinked ? formatMoney(combinedCents / 100) : "–"}</dd>
         </div>
-      </div>
+      </dl>
 
+      {!stxLinked && wallet && <LinkStxButton appName={app.name} block />}
+      {stxLinked && (
+        <p className="wallet-note">STX funds stay at STX. {app.name} never holds them.</p>
+      )}
       {stxLinked && (
         <button className="link wallet-raw-toggle" onClick={() => setShowRaw((v) => !v)}>
           {showRaw ? "Hide" : "Show"} raw STX balance
         </button>
       )}
-      {stxLinked && showRaw && (
-        <pre className="json">{JSON.stringify(wallet?.stx.balance, null, 2)}</pre>
-      )}
+      {stxLinked && showRaw && <pre className="json">{JSON.stringify(rawBalance, null, 2)}</pre>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { subscribeOrderBook } from "../marketFeed";
 
 // Live aggregated order book for one market, from STX's public `orderbook` topic
 // relayed over the backend SSE proxy. The backend joins with a `market_ids`
-// filter; each "book" push is a COMPLETE snapshot for that market_id — we replace
+// filter; each "book" push is a COMPLETE snapshot for that market_id: we replace
 // the book wholesale, never apply deltas. Mount this with a React `key={marketId}`
 // so a market switch remounts and resubscribes cleanly.
 

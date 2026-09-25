@@ -8,17 +8,17 @@
 //
 // The relayed SSE event names are the Phoenix push names (`book`, `ticker`,
 // `trade`, `market_stats`, `market_stats_snapshot`), plus `joined` (the join
-// reply — carries market_stats history), `join_error`, and `ready` (the backend
+// reply: carries market_stats history), `join_error`, and `ready` (the backend
 // subscribed). Each event's `data` is the raw channel payload, so the payload
 // types in publicMarketData.ts are unchanged.
 
-import { BACKEND, getActiveApp } from "./api";
-import type { BookSnapshot, TickerUpdate, TradeMsg } from "./publicMarketData";
+import { BACKEND } from "./api";
+import type { BookSnapshot, MarketBrief, TickerUpdate, TradeMsg } from "./publicMarketData";
 
 export type FeedStatus = "connecting" | "open" | "error";
 
 function streamUrl(topic: string, params: { marketIds?: string[]; range?: string }): string {
-  const qs = new URLSearchParams({ app: getActiveApp(), topic });
+  const qs = new URLSearchParams({ topic });
   if (params.marketIds && params.marketIds.length > 0) qs.set("market_ids", params.marketIds.join(","));
   if (params.range) qs.set("range", params.range);
   return `${BACKEND}/api/market-stream?${qs.toString()}`;
@@ -144,5 +144,20 @@ export function subscribeMarketStats(
     if (p) handlers.onDelta(p);
   });
   es.onerror = () => handlers.onStatus?.("error");
+  return () => es.close();
+}
+
+// ---- Live event status (scores) ---------------------------------------------
+
+// Subscribe to the live event status of a few markets (one per live event; the
+// backend caps the list at 12). Each `brief` is one market's event status, on
+// join and again whenever the score, clock or status changes.
+export function subscribeBriefs(marketIds: string[], onBrief: (b: MarketBrief) => void): () => void {
+  if (marketIds.length === 0) return () => {};
+  const es = new EventSource(streamUrl("market", { marketIds }), { withCredentials: true });
+  on(es, "brief", (ev) => {
+    const p = payloadOf<MarketBrief>(ev);
+    if (p) onBrief(p);
+  });
   return () => es.close();
 }

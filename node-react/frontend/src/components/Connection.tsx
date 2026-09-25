@@ -4,7 +4,7 @@ import { api, type LinkState, type PublicApp } from "../api";
 // The STX connection status, rendered in the header as a compact chip. When
 // linked it shows "● Linked to STX" with an info toggle that drops down the
 // scopes, the token-stays-on-the-backend note, and unlink. When not linked it
-// renders nothing here — the link call-to-action lives in the wallet.
+// renders nothing here: the link call-to-action lives in the wallet.
 export function Connection({
   app,
   link,
@@ -60,7 +60,7 @@ export function Connection({
           <p className="muted">
             The access token stays on {app.name}'s backend; this browser never sees it.
           </p>
-          <button className="link danger" onClick={unlink} disabled={busy}>
+          <button type="button" className="unlink-btn" onClick={unlink} disabled={busy}>
             {busy ? "Unlinking…" : "Unlink STX account"}
           </button>
           {error && <p className="error">{error}</p>}

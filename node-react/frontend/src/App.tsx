@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { api, openStxPopup, setActiveApp, BACKEND_ORIGIN, type MeState, type PublicApp } from "./api";
-import { STX_HTTP_URL, marketLabel, type MarketSummary } from "./publicMarketData";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, openStxPopup, type MeState, type PublicApp } from "./api";
+import { marketLabel, setStxUrl, stxUrl, type MarketBrief, type MarketSummary } from "./publicMarketData";
+import { IsvLogo } from "./components/IsvLogo";
 import { SignIn } from "./components/SignIn";
 import { Wallets } from "./components/Wallets";
 import { Connection } from "./components/Connection";
@@ -10,8 +11,8 @@ import { ActivityPanel } from "./components/ActivityPanel";
 import { MyActivity, type ActivityTab } from "./components/MyActivity";
 import { MarketData } from "./components/MarketData";
 import { PoweredByStx } from "./components/PoweredByStx";
+import { LiveAccountProvider, useLiveAccountStream } from "./liveAccount";
 
-const STORAGE_KEY = "stx_isv_active_app";
 const THEME_KEY = "stx_isv_theme";
 
 const NAV_LABEL: Record<ActivityTab, string> = {
@@ -24,18 +25,18 @@ const NAV_LABEL: Record<ActivityTab, string> = {
 const ERROR_MESSAGES: Record<string, string> = {
   not_signed_in: "Sign in to the app before linking your STX account.",
   unknown_app: "Unknown app profile.",
-  invalid_state: "The linking request expired or was replayed — try again.",
-  missing_code_or_state: "STX did not return an authorization code — try again.",
-  token_exchange_failed: "STX rejected the token exchange — check the client credentials.",
+  invalid_state: "The linking request expired or was replayed. Try again.",
+  missing_code_or_state: "STX did not return an authorization code. Try again.",
+  token_exchange_failed: "STX rejected the token exchange. Check the client credentials.",
   link_target_gone: "The account to link to was gone by the time STX redirected back.",
 };
 
-// Top-level app. Presents as the ISV app (Heater) connecting to STX.
-// Left column: the ISV member journey — sign in, dual wallet, link STX, trade.
-// Right column: the public, credential-free live market-data feed.
+// Top-level app: Sideline, a fictional sports app, connecting to STX.
+// Main column: the public, credential-free live markets with scores. Side
+// column: the member journey (sign in, dual wallet, link STX) and the betslip,
+// which appears when a market is tapped.
 export function App() {
-  const [apps, setApps] = useState<PublicApp[]>([]);
-  const [activeId, setActiveId] = useState<string>("heater");
+  const [profile, setProfile] = useState<PublicApp | null>(null);
   const [me, setMe] = useState<MeState | null>(null);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -45,7 +46,12 @@ export function App() {
   });
   // Betslip: markets multi-selected from the cards, placed together as a batch.
   const [betslip, setBetslip] = useState<BetslipLeg[]>([]);
-  const betslipIds = new Set(betslip.map((l) => l.marketId));
+  const betslipIds = useMemo(() => new Set(betslip.map((l) => l.marketId)), [betslip]);
+  // Live event status (score, clock) by event id, from the market feed.
+  const [briefs, setBriefs] = useState<Record<string, MarketBrief>>({});
+  const onBrief = useCallback((eventId: string, b: MarketBrief) => {
+    setBriefs((cur) => ({ ...cur, [eventId]: b }));
+  }, []);
   const [view, setView] = useState<"home" | "api" | ActivityTab>("home");
 
   function toggleBetslip(m: MarketSummary) {
@@ -64,31 +70,65 @@ export function App() {
           price: priceCents,
           quantity: "",
           maxPrice: m.maxPrice,
+          market: m,
         },
       ];
     });
   }
+
+  // The betslip opens on the first tapped market. On a narrow screen it sits
+  // below the markets, so bring it into view.
+  const hadLegs = useRef(false);
+  useEffect(() => {
+    const has = betslip.length > 0;
+    if (has && !hadLegs.current && window.matchMedia("(max-width: 900px)").matches) {
+      requestAnimationFrame(() => document.getElementById("betslip")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+    hadLegs.current = has;
+  }, [betslip.length]);
   // Bumped after any state change so child panels refetch.
   const [refreshKey, setRefreshKey] = useState(0);
 
   const bump = () => setRefreshKey((k) => k + 1);
 
   // Load `me` for the active app.
-  async function reloadMe() {
+  async function reloadMe(verify = false) {
     try {
-      setMe(await api.me());
+      setMe(await api.me(verify));
     } catch {
       setMe(null);
     }
   }
 
-  // Boot: read the OAuth redirect flags, load app profiles, pick the active
-  // app, then load its state.
+  // Before the betslip offers "Place", make sure the STX link still works: a
+  // grant revoked at STX (or refused on refresh) must show the link call to
+  // action, not a Place button that fails. Checked when the slip opens, when an
+  // order comes back "not linked", and when the live feed ends.
+  const [checkingLink, setCheckingLink] = useState(false);
+  async function verifyLink() {
+    setCheckingLink(true);
+    try {
+      await reloadMe(true);
+    } finally {
+      setCheckingLink(false);
+    }
+  }
+
+  // The logo goes home: the markets list, no open game, an empty betslip.
+  const [homeKey, setHomeKey] = useState(0);
+  function goHome() {
+    setView("home");
+    setBetslip([]);
+    setHomeKey((k) => k + 1);
+    window.scrollTo({ top: 0 });
+  }
+
+  // Boot: read the OAuth redirect flags, load the app profile, then the
+  // member's state.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error");
     const linked = params.get("linked");
-    const appParam = params.get("app");
     if (err) setBanner({ kind: "error", text: ERROR_MESSAGES[err] ?? `OAuth error: ${err}` });
     else if (linked) setBanner({ kind: "ok", text: "STX account linked." });
     if (params.has("error") || params.has("linked") || params.has("app")) {
@@ -96,30 +136,18 @@ export function App() {
     }
 
     (async () => {
-      let list: PublicApp[] = [];
       try {
-        const res = await api.apps();
-        list = res.apps;
-        setApps(list);
+        const res = await api.app();
+        setProfile(res.app);
+        setStxUrl(res.stxPublicUrl);
       } catch {
-        // apps() failing means the backend is unreachable; leave the banner.
+        // app() failing means the backend is unreachable; leave the banner.
       }
-      // Prefer the app from the callback, then the stored choice, then default.
-      const stored = safeLocalGet(STORAGE_KEY);
-      const wanted = appParam || stored || list.find((a) => a.isDefault)?.id || "heater";
-      const chosen = list.find((a) => a.id === wanted && a.enabled)?.id ?? list.find((a) => a.enabled)?.id ?? "heater";
-      applyActiveApp(chosen);
       await reloadMe();
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function applyActiveApp(id: string) {
-    setActiveApp(id); // module-level: every /api call now carries ?app=id
-    setActiveId(id);
-    safeLocalSet(STORAGE_KEY, id);
-  }
 
   async function afterAuthChange() {
     await reloadMe();
@@ -127,13 +155,11 @@ export function App() {
   }
 
   // Receive the linking result from the OAuth popup (/callback relays it via
-  // postMessage, then closes itself — see startLink). The popup runs on the
-  // backend origin, so trust that alongside this window's own origin (they are
-  // the same in a single-origin deploy, and differ in split dev). The message
-  // carries only link status, never a token.
+  // postMessage, then closes itself: see startLink). Only messages from this
+  // same origin are trusted; the popup shares the ISV origin with this window.
   useEffect(() => {
     function onLinkMessage(e: MessageEvent) {
-      if (e.origin !== window.location.origin && e.origin !== BACKEND_ORIGIN) return;
+      if (e.origin !== window.location.origin) return;
       const data = e.data as { type?: string; status?: string; error?: string } | null;
       if (!data || data.type !== "stx-link") return;
       if (data.status === "linked") {
@@ -152,7 +178,7 @@ export function App() {
   }, []);
 
   // Banners are transient confirmations ("STX account linked."), not persistent
-  // state — auto-dismiss so they don't linger once the member is connected.
+  // state: auto-dismiss so they don't linger once the member is connected.
   useEffect(() => {
     if (!banner) return;
     const t = setTimeout(() => setBanner(null), 4000);
@@ -180,20 +206,45 @@ export function App() {
     await afterAuthChange();
   }
 
-  const app = me?.app ?? apps.find((a) => a.id === activeId) ?? null;
+  const app = me?.app ?? profile;
   const linked = me?.link.connected ?? false;
-  const brandColor = app?.brandColor ?? "#ff5a1f";
-  const appName = app?.name ?? "Heater";
+  // The member's live STX account (balance, open orders, fills, positions),
+  // one SSE stream for the whole app while signed in and linked. With it open,
+  // trading refetches nothing: the panels update from the stream. Without it
+  // (the feed failed), placements and cancels fall back to a refetch.
+  const liveAccount = useLiveAccountStream(Boolean(me?.user) && linked);
+  const afterTrade = liveAccount.live ? () => {} : bump;
+
+  // Opening the betslip (first market tapped) while linked checks the link.
+  const slipOpen = betslip.length > 0;
+  useEffect(() => {
+    if (slipOpen && linked) void verifyLink();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slipOpen]);
+  // The live feed ended (the grant died): re-read the link.
+  useEffect(() => {
+    if (liveAccount.failed && linked) void verifyLink();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveAccount.failed]);
+  const brandColor = app?.brandColor ?? "#3d8bff";
+  const appName = app?.name ?? "Sideline";
 
   return (
+    <LiveAccountProvider value={liveAccount}>
     <div className="app-shell" style={{ ["--brand" as string]: brandColor } as React.CSSProperties}>
       <header className="topbar">
-        <div className="topbar-brand">
-          <span className="isv-mark" style={{ background: brandColor }} aria-hidden="true">
-            {(appName[0] || "?").toUpperCase()}
-          </span>
-          <span className="isv-name">{appName}</span>
-        </div>
+        <a
+          className="topbar-brand"
+          href="/"
+          id="home-link"
+          aria-label={`${appName} home`}
+          onClick={(e) => {
+            e.preventDefault();
+            goHome();
+          }}
+        >
+          <IsvLogo appId={app?.id} name={appName} brandColor={brandColor} />
+        </a>
         {me?.user && (
           <nav className="topbar-nav">
             <button
@@ -232,7 +283,7 @@ export function App() {
               type="button"
               className="header-deposit"
               onClick={() =>
-                openStxPopup(`${STX_HTTP_URL}/player/deposit_funds`, "stx_deposit", { w: 540, h: 780 })
+                openStxPopup(`${stxUrl()}/player/deposit_funds`, "stx_deposit", { w: 540, h: 780 })
               }
             >
               <span aria-hidden="true">+</span> Deposit
@@ -268,9 +319,14 @@ export function App() {
           <main className="market-col">
             <div className="section-head">
               <h2>Markets</h2>
-              <span className="muted">Live prices and depth from the STX Exchange.</span>
             </div>
-            <MarketData betslipIds={betslipIds} onToggleBetslip={toggleBetslip} />
+            <MarketData
+              betslipIds={betslipIds}
+              onToggleBetslip={toggleBetslip}
+              briefs={briefs}
+              onBrief={onBrief}
+              homeKey={homeKey}
+            />
           </main>
 
           {/* Trade + account: the ISV member journey, on the right like a real book. */}
@@ -283,16 +339,20 @@ export function App() {
               <>
                 {!me?.user && <SignIn app={app} onSignedIn={afterAuthChange} />}
                 {me?.user && <Wallets app={app} linked={linked} refreshKey={refreshKey} />}
-                {/* Always visible so a slip built while signed out shows a clear
-                    sign-in / link prompt rather than vanishing. */}
+                {/* Appears when a market is tapped; unlinked, it carries the
+                    link call to action where the order would go. */}
                 <Betslip
                   legs={betslip}
                   onChange={setBetslip}
-                  onPlaced={bump}
+                  onPlaced={afterTrade}
                   linked={linked}
                   signedIn={Boolean(me?.user)}
+                  appName={appName}
+                  briefs={briefs}
+                  checkingLink={checkingLink}
+                  onUnlinked={verifyLink}
                 />
-                {me?.user && linked && <LiveFeed appId={activeId} onChange={bump} />}
+                {me?.user && linked && <LiveFeed />}
               </>
             )}
           </aside>
@@ -310,18 +370,21 @@ export function App() {
           <div className="section-head">
             <h2>{NAV_LABEL[view]}</h2>
           </div>
-          <MyActivity refreshKey={refreshKey} onChanged={bump} activeTab={view} />
+          <MyActivity refreshKey={refreshKey + liveAccount.resyncs} onChanged={afterTrade} activeTab={view} />
         </section>
       ) : null}
 
       <footer className="app-foot">
-        <span className="muted">
-          {appName} is a demo ISV built on the STX Exchange. Orders, balances and the
-          order book are real STX preview data.
-        </span>
+        <div className="foot-text">
+          <p className="fiction-note" id="fiction-note">
+            Sideline is a demo app built on the STX API. Not a real product.
+          </p>
+          <p className="muted">Markets, scores, orders and balances are real STX preview data.</p>
+        </div>
         <PoweredByStx />
       </footer>
     </div>
+    </LiveAccountProvider>
   );
 }
 

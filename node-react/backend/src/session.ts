@@ -1,6 +1,6 @@
 // Local session cookie helpers.
 //
-// The "session" here is purely the ISV app's own login state — an opaque id in
+// The "session" here is purely the ISV app's own login state: an opaque id in
 // an httpOnly cookie that keys the server-side token store. It is unrelated to
 // STX's session; STX only ever sees bearer tokens.
 

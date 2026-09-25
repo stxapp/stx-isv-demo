@@ -1,4 +1,4 @@
-// STX market data — served entirely through the ISV backend now.
+// STX market data: served entirely through the ISV backend now.
 //
 // The browser no longer talks to STX for market data. Both surfaces go through
 // the confidential backend, which attributes them to the app with an app token
@@ -15,14 +15,33 @@
 //      money and quantities are STRINGS already formatted in dollars, so they
 //      render as-is (do NOT divide by 100).
 //
-// The catalog seeds the list; the SSE feeds keep it live. `STX_HTTP_URL` stays
-// only for links that open the STX site itself (deposit, "powered by") — not for
-// market data.
+// The catalog seeds the list; the SSE feeds keep it live. The exchange's own
+// address (`stxUrl()`) is used only for what the browser loads from the exchange
+// itself: the deposit popup, the "powered by" link and the sport icons. It comes
+// from the backend at runtime (GET /api/app), so moving hosts needs no rebuild.
 
-import { BACKEND, getActiveApp } from "./api";
+import { BACKEND } from "./api";
 
-export const STX_HTTP_URL =
-  import.meta.env.VITE_STX_HTTP_URL ?? "http://localhost:4000";
+let stxPublicUrl = (import.meta.env.VITE_STX_HTTP_URL ?? "http://localhost:4000").replace(/\/+$/, "");
+
+// Set once from GET /api/app (the backend's STX_PUBLIC_URL).
+export function setStxUrl(url: string | null | undefined): void {
+  if (url) stxPublicUrl = url.replace(/\/+$/, "");
+}
+
+// The exchange's public origin, e.g. https://stx-sandbox.example.com.
+export function stxUrl(): string {
+  return stxPublicUrl;
+}
+
+// The exchange-served icon for a sport ("Baseball" -> .../baseball.svg). The
+// exchange answers an unknown sport with its generic icon, so any name is safe.
+// These are the only sports images the exchange serves: it has no team or
+// league logos (see README, "Exchange gaps").
+export function sportIconUrl(sport: string | null | undefined): string {
+  const name = (sport ?? "general").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || "general";
+  return `${stxPublicUrl}/api/images/categories/standard/${encodeURIComponent(name)}.svg`;
+}
 
 // ---- Catalog --------------------------------------------------------------
 
@@ -48,6 +67,13 @@ export interface MarketSummary {
   // The pipe-delimited settlement specifier (player|jersey|STAT|line for a
   // player prop, side|EVENT_STAT|NA for a game prop). Null for a plain market.
   specifier: string | null;
+  // The event's teams (away first, then home), status and start (epoch ms).
+  participants: Participant[];
+  eventStatus: string | null;
+  eventStart: number | null;
+  // The market's own wording: what it settles on, as a sentence and a question.
+  description: string | null;
+  question: string | null;
   // Non-null when the market is a stat-line prop. `player` set => player prop;
   // set with no `player` => event/game prop.
   statDetail: {
@@ -59,13 +85,20 @@ export interface MarketSummary {
   } | null;
 }
 
+export interface Participant {
+  role: string | null; // "away" | "home"
+  name: string | null;
+  shortName: string | null;
+  abbreviation: string | null;
+}
+
 // Fetches the market catalog from the backend. `limit` bounds the list. The
 // backend narrows to OPEN markets and reshapes STX's REST response into
 // `MarketSummary`. Sends the session cookie + active app (same as every /api
 // call) so the read is attributed to the right app profile. Throws with a
 // readable message on transport errors so the caller can surface them.
 export async function fetchMarkets(limit = 500): Promise<MarketSummary[]> {
-  const res = await fetch(`${BACKEND}/api/markets?app=${encodeURIComponent(getActiveApp())}&limit=${limit}`, {
+  const res = await fetch(`${BACKEND}/api/markets?limit=${limit}`, {
     credentials: "include",
     headers: { Accept: "application/json" },
   });
@@ -91,7 +124,7 @@ export interface BookLevel {
   total_liquidity: string;
 }
 
-// A full snapshot of one market's book. NOT a delta — replace wholesale on each
+// A full snapshot of one market's book. NOT a delta: replace wholesale on each
 // push (the server documents every "book" push as a complete snapshot).
 export interface BookSnapshot {
   market_id: string;
@@ -141,38 +174,48 @@ export interface TradeMsg {
 
 // ---- Formatting helpers ---------------------------------------------------
 
-// Integer cents -> "$X.XX". Used only for catalog money; live feeds are
+// Integer cents -> "$X,XXX.XX". Used only for catalog money; live feeds are
 // already dollar strings.
 export function centsToDollars(cents: number | null | undefined): string {
-  if (cents == null) return "—";
-  return `$${(cents / 100).toFixed(2)}`;
+  if (cents == null) return "-";
+  return formatMoney(cents / 100);
 }
 
 // A live dollar string, or an em dash when absent.
 export function dollars(value: string | null | undefined): string {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   return value.startsWith("$") ? value : `$${value}`;
 }
 
-// Abbreviate a dollar amount for compact display: "$1.00B", "$1.0M", "$12.5K",
-// or "$250.00" below 10,000. The input is a plain dollar string (possibly with a
-// leading "$"); returns the em dash when it is absent or unparseable. Pair it with
-// `moneyTitle` on a `title=` attribute so the exact figure is one hover away.
+// A dollar amount in full, with thousands separators and cents: "$100,000.00",
+// "-$24.75". The input is a dollar string (a leading "$" and commas are fine) or
+// a number of dollars; returns an en dash when absent or unparseable. This is
+// how every balance is shown: a wallet never abbreviates.
+export function formatMoney(value: string | number | null | undefined): string {
+  const n = typeof value === "number" ? (Number.isFinite(value) ? value : null) : parseMoney(value);
+  if (n === null) return "–";
+  const abs = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${n < 0 ? "-" : ""}$${abs}`;
+}
+
+// Abbreviate a dollar amount for a tight chip only (market volume): "$1.00B",
+// "$1.00M", "$12.5K", or the full amount below 10,000. Never for a balance; see
+// `formatMoney`. Pair it with `moneyTitle` so the exact figure is one hover away.
 export function compactMoney(value: string | null | undefined): string {
   const n = parseMoney(value);
-  if (n === null) return "—";
+  if (n === null) return "-";
   const abs = Math.abs(n);
   const sign = n < 0 ? "-" : "";
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 1e4) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
-  return `${sign}$${abs.toFixed(2)}`;
+  return formatMoney(n);
 }
 
 // The exact dollar figure, for a `title=` tooltip beside a `compactMoney` value.
 export function moneyTitle(value: string | null | undefined): string {
   const n = parseMoney(value);
-  return n === null ? "" : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return n === null ? "" : formatMoney(n);
 }
 
 function parseMoney(value: string | null | undefined): number | null {
@@ -186,7 +229,7 @@ export function marketLabel(m: MarketSummary): string {
   return m.shortTitle ?? m.title ?? m.symbol ?? m.marketId;
 }
 
-// A concise, human label for a market as shown on the cards — a player prop
+// A concise, human label for a market as shown on the cards: a player prop
 // reads "Player · Stat line", everything else falls back to the short title.
 // Used to name markets in the orders / trades / settlements rows.
 export function marketDisplayLabel(m: MarketSummary): string {
@@ -202,4 +245,53 @@ export function marketDisplayLabel(m: MarketSummary): string {
 // The best display name for the market's event.
 export function eventLabel(m: MarketSummary): string {
   return m.eventShortTitle ?? m.eventTitle ?? "";
+}
+
+// ---- Events: teams, status, live score ------------------------------------
+
+// One market's event status from GET /api/market-stream?topic=market (the
+// exchange's `market:<id>` channel): `event_brief` is the score and clock while
+// the game is on ("CHC 3 - 4 BOS : Bottom 8th 1 Outs"), the start time before.
+export interface MarketBrief {
+  market_id: string;
+  event_id: string | null;
+  event_brief: string | null;
+  detailed_event_brief: string | null;
+  event_status: string | null;
+  status: string | null;
+}
+
+// The two sides of an event, away first ("CHC @ BOS"), or [] when the market
+// names no teams (a futures or novelty market).
+export function teams(m: Pick<MarketSummary, "participants">): Participant[] {
+  const away = m.participants.find((p) => p.role === "away");
+  const home = m.participants.find((p) => p.role === "home");
+  if (away && home) return [away, home];
+  return m.participants.slice(0, 2);
+}
+
+export function isLive(status: string | null | undefined): boolean {
+  return status === "in_progress" || status === "live";
+}
+
+// A scheduled event's start, in the viewer's time: "Today 7:05 PM",
+// "Tomorrow 1:00 PM", "Wed Oct 1, 9:30 PM".
+export function startLabel(ms: number | null | undefined, now = Date.now()): string | null {
+  if (ms == null || !Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const day = (t: number) => new Date(t).toDateString();
+  if (day(ms) === day(now)) return `Today ${time}`;
+  if (day(ms) === day(now + 86_400_000)) return `Tomorrow ${time}`;
+  return `${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}, ${time}`;
+}
+
+// The live score from a brief, without the clock: "CHC 3 - 4 BOS : Bottom 8th"
+// -> { score: "CHC 3 - 4 BOS", clock: "Bottom 8th" }. The exchange writes the
+// score first and the period after a colon; anything else is shown whole.
+export function splitBrief(brief: string | null | undefined): { score: string; clock: string | null } | null {
+  if (!brief) return null;
+  const i = brief.indexOf(" : ");
+  if (i < 0) return { score: brief.trim(), clock: null };
+  return { score: brief.slice(0, i).trim(), clock: brief.slice(i + 3).trim() || null };
 }

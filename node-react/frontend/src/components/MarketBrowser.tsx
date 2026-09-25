@@ -1,16 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   compactMoney,
   eventLabel,
+  isLive,
   marketLabel,
+  teams,
+  type MarketBrief,
   type MarketSummary,
   type TickerUpdate,
 } from "../publicMarketData";
+import { EventStatus, Matchup, SportIcon } from "./EventBits";
 import { OrderBook } from "./OrderBook";
 import { PriceChart, type ChartSeries } from "./PriceChart";
 
-// Two-line money-line colors: side A (brand) vs side B (blue).
-const MONEYLINE_COLORS = ["var(--brand)", "#3b82f6"];
+// Two-line money-line colors: side A (brand) vs side B.
+const MONEYLINE_COLORS = ["var(--brand)", "var(--chart-2)"];
 
 // Prediction-market prices read best as cents (0–100¢). Convert a dollar-string
 // wire value ("0.4500") to a compact "45¢".
@@ -29,6 +33,10 @@ function toCents(dollarStr: string | null | undefined): string | null {
 interface Props {
   markets: MarketSummary[];
   tickers: Record<string, TickerUpdate>;
+  // Live event status (score, clock) by event id.
+  briefs: Record<string, MarketBrief>;
+  // Bumped by the logo link: back to all events.
+  homeKey: number;
   betslipIds: Set<string>;
   onToggle: (m: MarketSummary) => void;
   onOpenBook: (marketId: string) => void;
@@ -53,7 +61,7 @@ function teamCode(m: MarketSummary): string | null {
   return mm ? mm[1] : null;
 }
 
-// The two money-line sides for an event — one market per team. Symbols carry the
+// The two money-line sides for an event: one market per team. Symbols carry the
 // side (`-GAMEATL`) but also period variants (`-F5GAMEATL`, first-5 innings), so
 // both would match the same team code. Dedupe by team, preferring the full-game
 // market (shortest title, i.e. no "F5"), then order to match the short title
@@ -115,6 +123,8 @@ function distinct(values: (string | null)[]): string[] {
 export function MarketBrowser({
   markets,
   tickers,
+  briefs,
+  homeKey,
   betslipIds,
   onToggle,
   onOpenBook,
@@ -164,7 +174,12 @@ export function MarketBrowser({
       }
       g.markets.push(m);
     }
-    return [...map.values()].sort((a, b) => b.markets.length - a.markets.length);
+    // Live games first, then the soonest to start, then the busiest.
+    const live = (g: EventGroup) => (isLive(g.markets[0]?.eventStatus) ? 0 : 1);
+    const start = (g: EventGroup) => g.markets[0]?.eventStart ?? Number.MAX_SAFE_INTEGER;
+    return [...map.values()].sort(
+      (a, b) => live(a) - live(b) || start(a) - start(b) || b.markets.length - a.markets.length,
+    );
   }, [scoped]);
 
   const openEvent = openEventId ? events.find((e) => e.eventId === openEventId) ?? null : null;
@@ -208,6 +223,11 @@ export function MarketBrowser({
       })),
     [moneyPair],
   );
+
+  useEffect(() => {
+    if (homeKey > 0) pickSport(ALL);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeKey]);
 
   function pickSport(s: string) {
     setSport(s);
@@ -313,7 +333,12 @@ export function MarketBrowser({
           <>
             <div className="card-grid">
               {events.slice(0, MAX_CARDS).map((e) => (
-                <EventCard key={e.eventId} event={e} onOpen={() => openEventDetail(e.eventId)} />
+                <EventCard
+                  key={e.eventId}
+                  event={e}
+                  brief={briefs[e.eventId]}
+                  onOpen={() => openEventDetail(e.eventId)}
+                />
               ))}
             </div>
             {events.length > MAX_CARDS && (
@@ -327,12 +352,18 @@ export function MarketBrowser({
         // ---- Event detail: its markets, with prop/stat pills ----
         <div className="event-detail">
           <div className="event-detail-head">
-            <h3>{openEvent.title}</h3>
-            <span className="muted">
-              {openEvent.sport}
-              {openEvent.competition ? ` · ${openEvent.competition}` : ""} · {eventMarkets.length}{" "}
-              markets
-            </span>
+            <div className="event-detail-top">
+              <SportIcon sport={openEvent.sport} size={22} />
+              <span className="muted">
+                {openEvent.competition ?? openEvent.sport} · {eventMarkets.length} markets
+              </span>
+              {eventMarkets[0] && <EventStatus market={eventMarkets[0]} brief={briefs[openEvent.eventId]} />}
+            </div>
+            {eventMarkets[0] && teams(eventMarkets[0]).length === 2 ? (
+              <Matchup market={eventMarkets[0]} brief={briefs[openEvent.eventId]} />
+            ) : (
+              <h3>{openEvent.title}</h3>
+            )}
           </div>
 
           {/* Market-type / stat filters sit above the featured graph. */}
@@ -402,6 +433,7 @@ export function MarketBrowser({
               <MarketCard
                 key={m.marketId}
                 market={m}
+                brief={m.eventId ? briefs[m.eventId] : undefined}
                 live={tickers[m.marketId]}
                 selected={betslipIds.has(m.marketId)}
                 onSelect={() => onToggle(m)}
@@ -439,14 +471,21 @@ function Pill({
   );
 }
 
-function EventCard({ event, onOpen }: { event: EventGroup; onOpen: () => void }) {
+function EventCard({ event, brief, onOpen }: { event: EventGroup; brief?: MarketBrief; onOpen: () => void }) {
+  const first = event.markets[0];
+  const live = isLive(brief?.event_status ?? first?.eventStatus);
   return (
-    <button type="button" className="market-card event-card" onClick={onOpen}>
+    <button type="button" className={`market-card event-card${live ? " is-live" : ""}`} onClick={onOpen}>
       <div className="market-card-tags">
-        {event.sport && <span className="tag tag-sport">{event.sport}</span>}
+        <SportIcon sport={event.sport} />
         {event.competition && <span className="tag">{event.competition}</span>}
+        {first && <EventStatus market={first} brief={brief} />}
       </div>
-      <div className="market-card-title">{event.title}</div>
+      {first && teams(first).length === 2 ? (
+        <Matchup market={first} brief={brief} />
+      ) : (
+        <div className="market-card-title">{event.title}</div>
+      )}
       <div className="market-card-foot">
         <span className="event-count">{event.markets.length} markets</span>
         <span className="market-card-cta" aria-hidden="true">
@@ -459,12 +498,14 @@ function EventCard({ event, onOpen }: { event: EventGroup; onOpen: () => void })
 
 function MarketCard({
   market,
+  brief,
   live,
   selected,
   onSelect,
   onOpenBook,
 }: {
   market: MarketSummary;
+  brief?: MarketBrief;
   live: TickerUpdate | undefined;
   selected: boolean;
   onSelect: () => void;
@@ -479,8 +520,13 @@ function MarketCard({
     ? toCents(live.last_traded_price)
     : market.lastTradedPrice != null
       ? `${Math.round(market.lastTradedPrice)}¢`
-      : "—";
+      : "-";
   const vol = live?.total_volume ? compactMoney(live.total_volume) : null;
+  // The line under the title: the market for a prop, else the event, unless it
+  // only repeats the title.
+  const title = propLabel(market) ?? marketLabel(market);
+  const sub = propLabel(market) ? marketLabel(market) : eventLabel(market);
+  const subline = sub && sub !== title ? sub : null;
 
   return (
     <div className="market-card-wrap">
@@ -491,16 +537,22 @@ function MarketCard({
         aria-pressed={selected}
       >
         <div className="market-card-tags">
+          <SportIcon sport={market.sport} size={14} />
           {market.statDetail?.player ? (
             <span className="tag tag-prop">Player prop</span>
           ) : (
             market.statDetail && <span className="tag">Game prop</span>
           )}
+          {isLive(brief?.event_status ?? market.eventStatus) && (
+            <span className="event-status event-status-live">
+              <span className="live-beacon" aria-hidden="true" />
+              Live
+            </span>
+          )}
         </div>
         <div className="market-card-title">{propLabel(market) ?? marketLabel(market)}</div>
-        <div className="market-card-event">
-          {propLabel(market) ? marketLabel(market) : eventLabel(market)}
-        </div>
+        {market.question && <div className="market-card-question">{market.question}</div>}
+        {subline && <div className="market-card-event">{subline}</div>}
         <div className="market-card-foot">
           {bid && ask ? (
             <span className="price-chip price-live">

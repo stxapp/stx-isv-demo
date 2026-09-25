@@ -27,6 +27,3 @@ tmp/
 
 # Local watch-build output (Docker image builds its own)
 node-react/backend/public/
-
-# Internal deploy/preview manifests (kept in the private repo only)
-node-react/deploy/

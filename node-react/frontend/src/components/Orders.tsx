@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
+import { mergeById, useLiveAccount } from "../liveAccount";
 import { NotConnected } from "./NotConnected";
 
+// Open orders come from the live feed (the SDK's account view on the member's
+// socket): they appear, fill and disappear as STX pushes them, with no refetch.
+// History is REST (GET /api/v1/orders), loaded once and again after a
+// reconnect (`refreshKey`), with the orders the socket reported merged over it.
+//
 // Best-effort extraction of the fields STX returns on GET /api/v1/orders. The
-// demo does not hard-code a schema — it pulls the common fields when present and
+// demo does not hard-code a schema: it pulls the common fields when present and
 // keeps the full row available in a collapsible, so an unfamiliar shape still
 // renders cleanly instead of spilling raw JSON across the layout.
 interface LooseOrder {
@@ -60,7 +66,7 @@ function ordersFrom(payload: unknown): LooseOrder[] {
 // Terminal statuses: the order is no longer resting on the book, so cancelling
 // it is a no-op at best and an error at worst. Anything else (open,
 // partially_filled, pending, or an unknown/blank status) is treated as still
-// open — that is where the Cancel button lives.
+// open: that is where the Cancel button lives.
 const TERMINAL_STATUSES = new Set([
   "filled",
   "cancelled",
@@ -112,12 +118,15 @@ export function Orders({
 
   useEffect(load, [load, refreshKey]);
 
+  const liveAccount = useLiveAccount();
+
   async function cancel(id: string) {
     setBusy(id);
     try {
       await api.cancelOrder(id);
       onCancelled();
-      load();
+      // The live feed drops the order on its own; without it, reload.
+      if (!liveAccount.live) load();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -125,9 +134,10 @@ export function Orders({
     }
   }
 
-  const allOrders = ordersFrom(payload);
-  const openOrders = allOrders.filter(isOpenOrder);
-  const historyOrders = allOrders.filter((o) => !isOpenOrder(o));
+  const allOrders = mergeById(ordersFrom(payload) as LooseOrder[], liveAccount.orderUpdates.values()) as LooseOrder[];
+  const liveOpen = new Set(liveAccount.openOrders.map((o) => String(o.id)));
+  const openOrders = liveAccount.live ? (liveAccount.openOrders as LooseOrder[]) : allOrders.filter(isOpenOrder);
+  const historyOrders = allOrders.filter((o) => !isOpenOrder(o) && !liveOpen.has(String(orderId(o))));
   const MAX = 12;
   const active = subTab === "open" ? openOrders : historyOrders;
   const orders = active.slice(0, MAX);
@@ -138,7 +148,7 @@ export function Orders({
     <>
       {error && <p className="error">{error}</p>}
       {/* Open vs History: cancelling only makes sense on a resting order, so the
-          Cancel button lives only in the Open tab — no accidental cancel on a
+          Cancel button lives only in the Open tab: no accidental cancel on a
           filled or already-cancelled order. */}
       <div className="tabs tabs-sub" role="tablist">
         <button

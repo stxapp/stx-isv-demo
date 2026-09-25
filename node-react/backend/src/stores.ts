@@ -5,11 +5,12 @@
 // can swap in a Postgres/Redis implementation without touching the OAuth logic.
 
 import { db } from "./db";
+import { serializeDetail, type ActivityDetail } from "./activityDetail";
 
 // ---- User store (the mock ISV-app user + their own wallet) -----------------
 
-// A mock user of an ISV app (e.g. a Heater customer), scoped to one browser
-// session and one app profile. `walletCents` is the app's OWN balance — the
+// A mock user of an ISV app (e.g. a Sideline customer), scoped to one browser
+// session and one app profile. `walletCents` is the app's OWN balance: the
 // ISV-held money, entirely separate from any STX balance.
 export interface User {
   id: string;
@@ -66,12 +67,28 @@ export interface ActivityRecord {
   path: string;
   status: number | null;
   note: string | null;
+  // The @stxapp/stx-typescript call that produced the row, as code (see sdkCall.ts).
+  // Null on rows written before the column existed.
+  sdkCall: string | null;
+  // Whether a request/response detail is stored for the row (see detail()).
+  hasDetail: boolean;
 }
 
+// What a caller hands to record(): the row, plus the optional detail and the
+// ISV user the call was made for. The detail is redacted and size-capped here,
+// whatever the caller passed.
+export type ActivityEntry = Omit<ActivityRecord, "id" | "sdkCall" | "hasDetail"> & {
+  sdkCall?: string | null;
+  detail?: ActivityDetail | null;
+  userId?: string | null;
+};
+
 export interface ActivityStore {
-  record(entry: Omit<ActivityRecord, "id">): void;
-  // List newest-first, optionally filtered to one app.
+  record(entry: ActivityEntry): void;
+  // List newest-first, optionally filtered to one app. Details are not listed.
   list(limit: number, appId?: string): ActivityRecord[];
+  // The stored detail of one row, and who it belongs to (null: app-level).
+  detail(id: number): { appId: string | null; userId: string | null; detail: ActivityDetail | null } | null;
 }
 
 // ---- Flow store (transient PKCE + state) -----------------------------------
@@ -229,8 +246,8 @@ export const linkStore: LinkStore = {
 export const activityStore: ActivityStore = {
   record(entry) {
     db.query(
-      `INSERT INTO activity (ts, app_id, method, path, status, note)
-       VALUES ($ts, $app, $method, $path, $status, $note)`,
+      `INSERT INTO activity (ts, app_id, method, path, status, note, sdk_call, detail, user_id)
+       VALUES ($ts, $app, $method, $path, $status, $note, $sdk, $detail, $uid)`,
     ).run({
       $ts: entry.ts,
       $app: entry.appId,
@@ -238,24 +255,38 @@ export const activityStore: ActivityStore = {
       $path: entry.path,
       $status: entry.status,
       $note: entry.note,
+      $sdk: entry.sdkCall ?? null,
+      $detail: serializeDetail(entry.detail),
+      $uid: entry.userId ?? null,
     });
   },
 
   list(limit, appId) {
-    if (appId) {
-      return db
-        .query(
-          `SELECT id, ts, app_id AS appId, method, path, status, note
-           FROM activity WHERE app_id = $app ORDER BY id DESC LIMIT $limit`,
-        )
-        .all({ $app: appId, $limit: limit }) as ActivityRecord[];
+    const cols = `id, ts, app_id AS appId, method, path, status, note, sdk_call AS sdkCall,
+                  (detail IS NOT NULL) AS hasDetail`;
+    const rows = appId
+      ? db
+          .query(`SELECT ${cols} FROM activity WHERE app_id = $app ORDER BY id DESC LIMIT $limit`)
+          .all({ $app: appId, $limit: limit })
+      : db.query(`SELECT ${cols} FROM activity ORDER BY id DESC LIMIT $limit`).all({ $limit: limit });
+    return (rows as (Omit<ActivityRecord, "hasDetail"> & { hasDetail: number })[]).map((r) => ({
+      ...r,
+      hasDetail: r.hasDetail === 1,
+    }));
+  },
+
+  detail(id) {
+    const row = db
+      .query(`SELECT app_id AS appId, user_id AS userId, detail FROM activity WHERE id = $id`)
+      .get({ $id: id }) as { appId: string | null; userId: string | null; detail: string | null } | null;
+    if (!row) return null;
+    let detail: ActivityDetail | null = null;
+    try {
+      detail = row.detail ? (JSON.parse(row.detail) as ActivityDetail) : null;
+    } catch {
+      detail = null;
     }
-    return db
-      .query(
-        `SELECT id, ts, app_id AS appId, method, path, status, note
-         FROM activity ORDER BY id DESC LIMIT $limit`,
-      )
-      .all({ $limit: limit }) as ActivityRecord[];
+    return { appId: row.appId, userId: row.userId, detail };
   },
 };
 

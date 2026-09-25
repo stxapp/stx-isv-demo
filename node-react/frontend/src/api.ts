@@ -1,35 +1,7 @@
 // Thin client for the ISV backend. Every call sends the session cookie
-// (`credentials: "include"`) so the backend can attach the right user's token,
-// and carries `?app=<id>` identifying the ISV app profile the request is for.
+// (`credentials: "include"`) so the backend can attach the right user's token.
 
 export const BACKEND = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8787";
-
-// Origin the backend is served from. In a single-origin deploy this is the page
-// origin; in split dev it is the backend port (:8787). The OAuth popup relays
-// its result via postMessage FROM this origin, so App.tsx trusts it alongside
-// the page origin. Resolves an empty/relative VITE_BACKEND_URL to the page.
-export const BACKEND_ORIGIN = ((): string => {
-  try {
-    return new URL(BACKEND, window.location.href).origin;
-  } catch {
-    return window.location.origin;
-  }
-})();
-
-// The active ISV app profile. Set once the profiles load / the user switches;
-// every /api call and the /login redirect carry it.
-let activeApp = "heater";
-export function setActiveApp(id: string): void {
-  activeApp = id;
-}
-export function getActiveApp(): string {
-  return activeApp;
-}
-
-function withApp(path: string): string {
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}app=${encodeURIComponent(activeApp)}`;
-}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BACKEND}${path}`, {
@@ -65,7 +37,7 @@ export class ApiError extends Error {
   }
 
   // A 401 with `{error:"not_linked"}` means the member has not linked STX (or the
-  // link/session lapsed) — surfaced as a clear "connect STX" state, not a raw code.
+  // link/session lapsed): surfaced as a clear "connect STX" state, not a raw code.
   get notLinked(): boolean {
     return this.status === 401 && errCode(this.body) === "not_linked";
   }
@@ -99,8 +71,6 @@ export interface PublicApp {
   tagline: string;
   brandColor: string;
   scopes: string[];
-  enabled: boolean;
-  isDefault: boolean;
 }
 
 export interface DemoUser {
@@ -122,14 +92,15 @@ export interface MeState {
   link: LinkState;
 }
 
-export interface AppsResponse {
-  apps: PublicApp[];
-  defaultAppId: string;
+export interface AppResponse {
+  app: PublicApp;
+  // The exchange's public origin (deposit popup, sport icons).
+  stxPublicUrl?: string;
 }
 
 export interface WalletState {
   app: string;
-  heater: { label: string; walletCents: number; walletDollars: string; heldBy: string };
+  isv: { label: string; walletCents: number; walletDollars: string; heldBy: string };
   stx: {
     linked: boolean;
     heldBy?: string;
@@ -150,12 +121,31 @@ export interface ActivityRecord {
   path: string;
   status: number | null;
   note: string | null;
+  // The @stxapp/stx-typescript call that produced the row, as code. Null on old rows.
+  sdkCall: string | null;
+  // Whether the backend stored the (redacted) request and response for the row.
+  // Absent on a backend that predates details.
+  hasDetail?: boolean;
+}
+
+// One side of an activity detail. `body` is JSON (redacted, long lists cut to
+// their first items) or, when `truncated`, the first 20 KB as text.
+export interface ActivityBody {
+  body?: unknown;
+  truncated?: boolean;
+  size?: number;
+}
+
+export interface ActivityDetail {
+  request?: { method: string; path: string; query?: Record<string, unknown> } & ActivityBody;
+  response?: { status: number | null; summary?: string } & ActivityBody;
+  note?: string;
 }
 
 // Run the OAuth account-linking flow for the active app in a POPUP, so the
 // member stays on the ISV's own page (the brand never navigates away). The
 // popup is a top-level window on the STX origin, so STX login/consent is
-// first-party there — cookies and CSRF work with no cross-site weakening, and
+// first-party there: cookies and CSRF work with no cross-site weakening, and
 // X-Frame-Options (which would block an iframe) does not apply to a popup.
 // /callback relays the result back via postMessage and closes itself
 // (see the message listener in App.tsx). If the browser blocks the popup, fall
@@ -188,36 +178,40 @@ export function openStxPopup(url: string, name: string, size?: { w: number; h: n
 // Login/consent is a tall, narrow form; the deposit page (card form + methods)
 // wants a bit more room. Callers size each popup for its content.
 export function startLink(): void {
-  openStxPopup(`${BACKEND}/login?app=${encodeURIComponent(activeApp)}`, "stx_link", { w: 460, h: 720 });
+  openStxPopup(`${BACKEND}/login`, "stx_link", { w: 460, h: 720 });
 }
 
-// URL of the member's live SSE feed for a given app (see LiveFeed / backend
-// /api/stream). Same-origin, so EventSource carries the session cookie.
-export function liveStreamUrl(appId: string): string {
-  return `${BACKEND}/api/stream?app=${encodeURIComponent(appId)}`;
+// URL of the member's live SSE feed (see LiveFeed / backend /api/stream).
+// Same-origin, so EventSource carries the session cookie.
+export function liveStreamUrl(): string {
+  return `${BACKEND}/api/stream`;
 }
 
 export const api = {
-  apps: () => req<AppsResponse>("/api/apps"),
-  me: () => req<MeState>(withApp("/api/me")),
+  app: () => req<AppResponse>("/api/app"),
+  // `verify`: the backend proves a stored link still works with one STX call
+  // (a grant revoked at STX then reads as not linked).
+  me: (verify = false) => req<MeState>(verify ? "/api/me?verify=1" : "/api/me"),
   login: (name?: string) =>
-    req<{ user: DemoUser }>(withApp("/api/login"), {
+    req<{ user: DemoUser }>("/api/login", {
       method: "POST",
       body: JSON.stringify({ name: name ?? "" }),
     }),
-  signout: () => req<{ ok: boolean }>(withApp("/api/signout"), { method: "POST" }),
-  unlink: () => req<{ ok: boolean }>(withApp("/api/unlink"), { method: "POST" }),
-  wallet: () => req<WalletState>(withApp("/api/wallet")),
-  orders: () => req<unknown>(withApp("/api/orders")),
-  trades: () => req<unknown>(withApp("/api/trades")),
-  settlements: () => req<unknown>(withApp("/api/settlements")),
+  signout: () => req<{ ok: boolean }>("/api/signout", { method: "POST" }),
+  unlink: () => req<{ ok: boolean }>("/api/unlink", { method: "POST" }),
+  // `live`: the browser holds the live feed, so the backend never calls STX for
+  // the balance here (the STX cash comes from the stream).
+  wallet: (live = false) => req<WalletState>(live ? "/api/wallet?stx=live" : "/api/wallet"),
+  orders: () => req<unknown>("/api/orders"),
+  trades: () => req<unknown>("/api/trades"),
+  settlements: () => req<unknown>("/api/settlements"),
   placeOrder: (order: unknown) =>
-    req<unknown>(withApp("/api/orders"), { method: "POST", body: JSON.stringify(order) }),
+    req<unknown>("/api/orders", { method: "POST", body: JSON.stringify(order) }),
   placeBatch: (orders: unknown[]) =>
-    req<unknown>(withApp("/api/orders/batch"), { method: "POST", body: JSON.stringify({ orders }) }),
+    req<unknown>("/api/orders/batch", { method: "POST", body: JSON.stringify({ orders }) }),
   cancelOrder: (id: string) =>
-    req<unknown>(withApp(`/api/orders/${encodeURIComponent(id)}`), { method: "DELETE" }),
-  // The activity panel shows this app's calls; pass scoped=false for all apps.
-  activity: (scoped = true) =>
-    req<{ activity: ActivityRecord[] }>(scoped ? withApp("/api/activity") : "/api/activity"),
+    req<unknown>(`/api/orders/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  activity: () => req<{ activity: ActivityRecord[] }>("/api/activity"),
+  // The redacted request/response behind one activity row; null for old rows.
+  activityDetail: (id: number) => req<{ detail: ActivityDetail | null }>(`/api/activity/${id}/detail`),
 };

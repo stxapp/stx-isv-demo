@@ -1,4 +1,4 @@
-# Bun backend — the confidential OAuth client.
+# Bun backend: the confidential OAuth client.
 FROM oven/bun:1.1-slim
 
 WORKDIR /app

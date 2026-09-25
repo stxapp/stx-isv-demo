@@ -1,9 +1,10 @@
-# STX ISV demo — "Heater" app on a Bun/TS backend + Vite/React frontend.
+# STX ISV demo: Sideline (a fictional sports app used to demonstrate building on
+# STX, not a real product) on a Bun/TS backend + Vite/React frontend.
 #
 #   cp .env.example .env   # fill in CLIENT_ID / CLIENT_SECRET / STX_BASE_URL
 #   docker compose up
 #
-# Then open http://localhost:5173, sign in to Heater, and link your STX account.
+# Then open http://localhost:5173, sign in to Sideline, and link your STX account.
 
 services:
   backend:
@@ -14,18 +15,21 @@ services:
       PORT: 8787
       STX_BASE_URL: ${STX_BASE_URL}
 
-      # --- ISV app: Heater (its OAuth client) ---
+      # --- The app: Sideline (its OAuth client) ---
       CLIENT_ID: ${CLIENT_ID}
       CLIENT_SECRET: ${CLIENT_SECRET}
       REDIRECT_URI: ${REDIRECT_URI}
       OAUTH_SCOPES: ${OAUTH_SCOPES:-profile.read balance.read portfolio.read orders.read orders.write}
-      APP_ID: ${APP_ID:-heater}
-      APP_NAME: ${APP_NAME:-Heater}
-      APP_TAGLINE: ${APP_TAGLINE:-Fantasy sports, powered by the STX exchange.}
-      APP_BRAND_COLOR: ${APP_BRAND_COLOR:-#ff5a1f}
+      APP_ID: ${APP_ID:-sideline}
+      APP_NAME: ${APP_NAME:-Sideline}
+      APP_TAGLINE: ${APP_TAGLINE:-Trade real sports markets, powered by the STX Exchange.}
+      APP_BRAND_COLOR: ${APP_BRAND_COLOR:-#3d8bff}
       APP_WALLET_CENTS: ${APP_WALLET_CENTS:-25000}
 
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      # The exchange as the browser sees it (deposit popup, sport icons);
+      # defaults to STX_BASE_URL.
+      STX_PUBLIC_URL: ${STX_PUBLIC_URL:-}
       # SQLite lives on the named volume below.
       DB_PATH: /app/data/isv.sqlite
     volumes:
@@ -37,10 +41,9 @@ services:
       - "5173:5173"
     environment:
       # The browser calls the backend directly (market data included), so it must
-      # be reachable from the host. VITE_STX_HTTP_URL is only for links that open
-      # the STX site itself (deposit, "powered by").
+      # be reachable from the host. The exchange's own address reaches the
+      # browser at runtime from the backend (GET /api/app).
       VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8787}
-      VITE_STX_HTTP_URL: ${VITE_STX_HTTP_URL:-http://localhost:4000}
     depends_on:
       - backend
 
