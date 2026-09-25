@@ -1,0 +1,21 @@
+{
+  "name": "stx-isv-demo-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sideline: STX sample app (backend, the confidential OAuth client). Sideline is a fictional sports app used to demonstrate building on STX; it is not a real product or company.",
+  "scripts": {
+    "dev": "bun --watch run src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "hono": "^4.6.3",
+    "@stxapp/stx-typescript": "^0.4.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.10",
+    "typescript": "^5.6.2"
+  }
+}

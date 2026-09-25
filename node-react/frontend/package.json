@@ -1,0 +1,24 @@
+{
+  "name": "stx-isv-demo-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sideline: STX sample app (frontend). Sideline is a fictional sports app used to demonstrate building on STX; it is not a real product or company.",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

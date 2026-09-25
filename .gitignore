@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+bun.lockb
+package-lock.json
+
+# Env / secrets
+.env
+*.local
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# SQLite / data
+data/
+*.sqlite
+*.sqlite-*
+*.db
+
+# Logs, OS, editor
+*.log
+.DS_Store
+.idea/
+.vscode/
+tmp/
+
+# Local watch-build output (Docker image builds its own)
+node-react/backend/public/

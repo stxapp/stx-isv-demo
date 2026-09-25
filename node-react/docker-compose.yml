@@ -1,0 +1,70 @@
+# STX ISV demo: Sideline (a fictional sports app used to demonstrate building on
+# STX, not a real product) on a Bun/TS backend + Vite/React frontend.
+#
+#   cp .env.example .env   # fill in CLIENT_ID / CLIENT_SECRET / STX_BASE_URL
+#   docker compose up
+#
+# Then open http://localhost:5173, sign in to Sideline, and link your STX account.
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: 8787
+      STX_BASE_URL: ${STX_BASE_URL}
+
+      # --- The app: Sideline (its OAuth client) ---
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      REDIRECT_URI: ${REDIRECT_URI}
+      OAUTH_SCOPES: ${OAUTH_SCOPES:-profile.read balance.read portfolio.read orders.read orders.write}
+      APP_ID: ${APP_ID:-sideline}
+      APP_NAME: ${APP_NAME:-Sideline}
+      APP_TAGLINE: ${APP_TAGLINE:-Trade real sports markets, powered by the STX Exchange.}
+      APP_BRAND_COLOR: ${APP_BRAND_COLOR:-#3d8bff}
+      APP_WALLET_CENTS: ${APP_WALLET_CENTS:-25000}
+
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      # The exchange as the browser sees it (deposit popup, sport icons);
+      # defaults to STX_BASE_URL.
+      STX_PUBLIC_URL: ${STX_PUBLIC_URL:-}
+      # SQLite lives on the named volume below.
+      DB_PATH: /app/data/isv.sqlite
+    volumes:
+      - isv_data:/app/data
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      # The browser calls the backend directly (market data included), so it must
+      # be reachable from the host. The exchange's own address reaches the
+      # browser at runtime from the backend (GET /api/app).
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8787}
+    depends_on:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # Production-shaped alternative: swap SQLite for Postgres. Uncomment this
+  # service, point the backend's persistence layer at it (implement a Postgres
+  # variant of the stores in backend/src/stores.ts behind the same interfaces),
+  # and set a DATABASE_URL env var on `backend`.
+  #
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: isv
+  #     POSTGRES_PASSWORD: isv
+  #     POSTGRES_DB: isv_demo
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - isv_pg:/var/lib/postgresql/data
+  # ---------------------------------------------------------------------------
+
+volumes:
+  isv_data:
+  # isv_pg:

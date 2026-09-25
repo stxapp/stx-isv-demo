@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#64748b"/></marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff8a3d"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="720" rx="16" fill="#0f1419" stroke="#1e2a35"/>
+  <text x="32" y="42" font-size="19" font-weight="700" fill="#e6edf3">Sideline: how the app talks to STX</text>
+  <text x="32" y="64" font-size="13" fill="#8b98a5">The backend is a confidential OAuth client. The browser never holds a token.</text>
+
+  <!-- Lifelines -->
+  <g stroke="#2b3947" stroke-width="1.5" stroke-dasharray="4 5">
+    <line x1="170" y1="132" x2="170" y2="628"/>
+    <line x1="490" y1="132" x2="490" y2="628"/>
+    <line x1="800" y1="132" x2="800" y2="628"/>
+  </g>
+
+  <!-- Actor headers -->
+  <g font-size="13" font-weight="600" text-anchor="middle">
+    <rect x="70" y="88" width="200" height="42" rx="10" fill="#12212e" stroke="#3b82f6"/>
+    <text x="170" y="108" fill="#93c5fd">Browser (React)</text>
+    <text x="170" y="123" fill="#5b7089" font-size="10.5" font-weight="500">member journey + live data</text>
+    <rect x="390" y="88" width="200" height="42" rx="10" fill="#0f2420" stroke="#14b8a6"/>
+    <text x="490" y="108" fill="#5eead4">App backend (Bun)</text>
+    <text x="490" y="123" fill="#4a7a70" font-size="10.5" font-weight="500">confidential client</text>
+    <rect x="700" y="88" width="200" height="42" rx="10" fill="#241a10" stroke="#ff6a00"/>
+    <text x="800" y="108" fill="#fdba74">STX exchange</text>
+    <text x="800" y="123" fill="#8a6a43" font-size="10.5" font-weight="500">OAuth, REST, WebSocket</text>
+  </g>
+
+  <!-- section label: OAuth link -->
+  <text x="32" y="162" font-size="11" font-weight="700" fill="#ff8a3d" letter-spacing="0.04em">OAUTH LINK (PKCE)</text>
+
+  <g font-size="12.5" fill="#c7d0d9" text-anchor="middle">
+    <!-- 1 Browser -> Backend -->
+    <line x1="170" y1="188" x2="490" y2="188" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="330" y="180">Sign in: POST /api/login  (mock user + wallet)</text>
+    <!-- 2 Browser -> Backend -->
+    <line x1="170" y1="226" x2="490" y2="226" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="330" y="218">Link STX: GET /login?app=sideline</text>
+    <!-- 3 Backend -> STX -->
+    <line x1="490" y1="264" x2="800" y2="264" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="645" y="256">GET /oauth/authorize  (PKCE challenge + state)</text>
+    <!-- consent box -->
+    <rect x="676" y="286" width="248" height="42" rx="9" fill="#241a10" stroke="#7a5230"/>
+    <text x="800" y="303" font-size="11.5" fill="#fdba74" font-weight="600">Co-branded consent</text>
+    <text x="800" y="319" font-size="10.5" fill="#b0824f">member signs in, approves scopes, 2FA at STX</text>
+    <!-- 4 STX -> Browser -->
+    <line x1="800" y1="360" x2="170" y2="360" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ad)"/>
+    <text x="470" y="352">302 to /callback?code&amp;state</text>
+    <!-- 5 Browser -> Backend -->
+    <line x1="170" y1="398" x2="490" y2="398" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="330" y="390">GET /callback?code</text>
+    <!-- 6 Backend -> STX -->
+    <line x1="490" y1="436" x2="800" y2="436" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="645" y="428">POST /oauth/token  (code + PKCE verifier, Basic auth)</text>
+    <!-- 7 STX -> Backend -->
+    <line x1="800" y1="474" x2="490" y2="474" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ad)"/>
+    <text x="645" y="466">access_token + refresh_token  (stored server-side)</text>
+  </g>
+
+  <!-- section label: authenticated -->
+  <text x="32" y="516" font-size="11" font-weight="700" fill="#5eead4" letter-spacing="0.04em">AUTHENTICATED (PROXIED)</text>
+  <g font-size="12.5" fill="#c7d0d9" text-anchor="middle">
+    <!-- 8 Browser -> Backend -->
+    <line x1="170" y1="542" x2="490" y2="542" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="330" y="534">GET /api/wallet, /api/orders</text>
+    <!-- 9 Backend -> STX -->
+    <line x1="490" y1="580" x2="800" y2="580" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="645" y="572">Bearer token to /api/v1/*  (refresh on 401, retry once)</text>
+  </g>
+
+  <!-- section label: public -->
+  <text x="32" y="600" font-size="11" font-weight="700" fill="#93c5fd" letter-spacing="0.04em">PUBLIC MARKET DATA (APP TOKEN)</text>
+  <g font-size="12.5" fill="#c7d0d9" text-anchor="middle">
+    <!-- 10 Backend -> Browser (SSE relay) -->
+    <line x1="490" y1="624" x2="170" y2="624" stroke="#3b82f6" stroke-width="1.6" stroke-dasharray="2 4" marker-end="url(#a)"/>
+    <text x="330" y="616" fill="#9ec1f2">SSE relay: prices, book, trades, scores</text>
+    <!-- 11 Backend -> STX (client_credentials) -->
+    <line x1="490" y1="624" x2="800" y2="624" stroke="#3b82f6" stroke-width="1.6" stroke-dasharray="2 4" marker-end="url(#a)"/>
+    <text x="645" y="616" fill="#9ec1f2">client_credentials (market_data): REST + WS</text>
+  </g>
+
+  <!-- footnote -->
+  <rect x="32" y="642" width="896" height="58" rx="10" fill="#141f10" stroke="#3f5a2a"/>
+  <text x="52" y="666" font-size="12.5" fill="#c9e6a8" font-weight="600">PKCE (Proof Key for Code Exchange, RFC 7636): the client proves it started the flow, so an intercepted code is useless.</text>
+  <text x="52" y="685" font-size="11.5" fill="#9fbf82">The client_secret and every token stay on the backend. Tokens are opaque and revocable, and no scope can move funds.</text>
+</svg>
