@@ -98,11 +98,91 @@ Open <http://localhost:5173>:
    balance live, with a chip for each change.
 4. **Unlink** from the account panel revokes the grant at STX.
 
-### The SDK
+## Using the STX TypeScript SDK
 
-The backend uses the STX TypeScript SDK, installed from npm as
+Every call the backend makes to STX goes through the STX TypeScript SDK,
 [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript)
-(0.4.2 or later). SDK documentation: <https://docs.stxapp.io/sdks/>.
+(0.4.2 or later). The SDK reference is at
+<https://docs.stxapp.io/sdks/typescript/>; all the STX SDKs are listed at
+<https://docs.stxapp.io/sdks/>. The wiring lives in
+[`node-react/backend/src/stx.ts`](node-react/backend/src/stx.ts).
+
+**One OAuth client per app.** The app's credentials go into one `OAuthClient`
+from `@stxapp/stx-typescript/oauth`, built once and shared, so token refreshes
+are single-flight per member and the app token is minted once:
+
+```ts
+import { OAuthClient } from "@stxapp/stx-typescript/oauth";
+
+const oauth = new OAuthClient({
+  baseUrl: process.env.STX_BASE_URL,
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  redirectUri: process.env.REDIRECT_URI,
+  scope: "profile.read balance.read portfolio.read orders.read orders.write",
+});
+```
+
+The SDK persists state through two small interfaces the app implements over
+its own database: a `TokenStore` (a member's tokens, keyed by the app's own
+user id) and a `PendingAuthorizationStore` (the PKCE verifier and `state`
+between the redirect and the callback). Sideline backs both with SQLite.
+
+**Linking a member** (`GET /login`, `GET /callback` in
+[`routes/auth.ts`](node-react/backend/src/routes/auth.ts)):
+
+```ts
+// /login: PKCE verifier + S256 challenge + state, stored; redirect to STX.
+const { url } = await oauth.beginAuthorization(pendingStore, { data: { userId } });
+
+// /callback: check ?error and state (single use), then exchange the code.
+const callback = await readCallback(pendingStore, new URL(request.url));
+await oauth.redeemAuthorization(callback, { store: tokens, memberKey: userId });
+```
+
+**Acting for the member.** `oauth.memberClient(tokens, userId)` returns an
+`STX` client that attaches the member's bearer token, refreshes it before
+expiry and once on a `401`, and deletes the stored link when STX refuses the
+refresh (a revoked grant):
+
+```ts
+const stx = oauth.memberClient(tokens, userId);
+await stx.balance();
+await stx.placeOrder(marketId, "buy", "limit", { price: "0.40", quantity: "10" });
+await stx.cancelOrder(orderId);
+await stx.orders();
+await stx.fills();
+await stx.settlements();
+```
+
+**Market data on the app's own token.** `oauth.appClient("market_data")`
+returns an `STX` client on a `client_credentials` token, with no member
+involved. Sideline uses it for the catalog (`catalog.markets({ status, limit,
+cursor })`) and for the public market channels.
+
+**Live data over the WebSocket.** `stx.websocket()` returns an `STXWebSocket`
+authenticated as the member (or as the app, on the app client). For the member,
+`ws.accountView({ onChange })` joins the balance, orders, fills and positions
+topics and keeps one merged view of the account up to date. On the app client,
+Sideline joins `ws.ticker()`, `ws.orderbook(ids)`, `ws.trades({ marketIds })`,
+`ws.marketStats(ids)` and `ws.market(id)` (live scores). The SDK reconnects and
+rejoins after a drop. The backend relays all of it to the browser over
+Server-Sent Events, so the browser never opens an STX socket.
+
+**Typed errors.** STX's answers come back as exceptions the app can branch on:
+
+| Error | Raised when | What Sideline does |
+| ----- | ----------- | ------------------ |
+| `STXException` | STX answered with an error status | forwards STX's status and body to the browser |
+| `STXGrantRevokedException` (`/oauth`) | the member's grant is gone (refresh refused) | shows "not linked" so the member can link again |
+| `STXOAuthException` (`/oauth`) | the callback carries an OAuth error, or no code or state | ends the link attempt with that error |
+| `STXChannelException` | a channel join is refused (for example, a scope the grant lacks) | joins the topics it may and reports the rest |
+
+**Unlinking** is `oauth.unlink(tokens, userId)`: it revokes the grant at STX
+and deletes the stored tokens.
+
+The app's **API calls** page shows the SDK call behind every request, so a
+running Sideline is also a live map of this section.
 
 ## The integration model
 

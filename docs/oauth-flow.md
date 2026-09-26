@@ -204,3 +204,28 @@ must never hold the token anyway), so the backend opens the socket: one per
 linked member for the account topics (`balances:<uid>`, `orders:<uid>`,
 `fills:<uid>`, `positions:<uid>`, each gated by its scope), and one per market
 subscription on the app token. Both are relayed to the browser over SSE.
+
+## The same flow with the TypeScript SDK
+
+Sideline runs every step above through the STX TypeScript SDK,
+[`@stxapp/stx-typescript`](https://docs.stxapp.io/sdks/typescript/). Its
+`/oauth` entry point implements the client side of this flow, so the app code is
+one call per step:
+
+| Step | SDK call (from `@stxapp/stx-typescript/oauth`) |
+| ---- | ---------------------------------------------- |
+| 1-2. PKCE, state, authorize URL | `oauth.beginAuthorization(pendingStore, { data })` returns `{ url }` to redirect to |
+| 4. Callback: `?error`, `state` check (single use) | `readCallback(pendingStore, callbackUrl)`, throws `STXOAuthException` |
+| 5-6. Token exchange and storage | `oauth.redeemAuthorization(callback, { store: tokens, memberKey })` |
+| Calls as the member, refresh on expiry or `401` | `oauth.memberClient(tokens, memberKey)`, an `STX` client |
+| A refresh STX refuses (revoked grant) | the stored tokens are deleted and `STXGrantRevokedException` is thrown |
+| Revoke | `oauth.unlink(tokens, memberKey)` |
+| App token (`client_credentials`) | `oauth.appClient("market_data")`, an `STX` client on the app's token |
+| Member socket (`x-stx-oauth-token`) | `stx.websocket()` on the member client, then `ws.accountView()` |
+
+`oauth` is one `OAuthClient` built from the app's client id, secret, redirect
+URI and scopes. `pendingStore` and `tokens` are the app's implementations of the
+SDK's `PendingAuthorizationStore` and `TokenStore` interfaces, over whatever
+database the app already has. See
+[`node-react/backend/src/stx.ts`](../node-react/backend/src/stx.ts) for
+Sideline's, and <https://docs.stxapp.io/sdks/> for the SDKs in other languages.

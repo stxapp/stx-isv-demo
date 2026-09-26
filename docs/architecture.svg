@@ -23,7 +23,7 @@
     <text x="170" y="123" fill="#5b7089" font-size="10.5" font-weight="500">member journey + live data</text>
     <rect x="390" y="88" width="200" height="42" rx="10" fill="#0f2420" stroke="#14b8a6"/>
     <text x="490" y="108" fill="#5eead4">App backend (Bun)</text>
-    <text x="490" y="123" fill="#4a7a70" font-size="10.5" font-weight="500">confidential client</text>
+    <text x="490" y="123" fill="#4a7a70" font-size="10.5" font-weight="500">confidential client, TS SDK</text>
     <rect x="700" y="88" width="200" height="42" rx="10" fill="#241a10" stroke="#ff6a00"/>
     <text x="800" y="108" fill="#fdba74">STX exchange</text>
     <text x="800" y="123" fill="#8a6a43" font-size="10.5" font-weight="500">OAuth, REST, WebSocket</text>
