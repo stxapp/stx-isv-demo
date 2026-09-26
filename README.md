@@ -45,10 +45,22 @@ walks through it step by step so a port to Next.js, Python or Go is obvious.
 
 ## Get sandbox access
 
-To run Sideline you need an STX sandbox exchange and an OAuth client registered
-on it (a client id, a client secret and your redirect URI), plus a sandbox
-member account to link. **Request sandbox access: contact STX developer
-support.**
+To run Sideline you need an OAuth client on the STX sandbox exchange (a client
+id, a client secret and your redirect URI), plus a sandbox member account to link.
+
+**Get sandbox credentials: sign in to the STX developer console with Google or
+GitHub and create an app.** The console is the STX developer console (link
+provided with your invite).
+
+1. Sign in with Google or GitHub. Your developer account is created on first
+   sign-in.
+2. Create an organization, then **Build an app**.
+3. Add `http://localhost:8787/callback` (or your deployed `<PUBLIC_URL>/callback`)
+   as a redirect URI and pick the member scopes Sideline uses.
+4. Creating the app issues its sandbox client. Copy the client id and secret
+   right away: the secret is shown once. Rotate it on the app's Credentials tab
+   if you lose it.
+5. The Credentials tab also shows the sandbox host to use as `STX_BASE_URL`.
 
 ## Run it locally
 
