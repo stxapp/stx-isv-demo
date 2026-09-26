@@ -1,231 +1,193 @@
-# OAuth 2.0 flow (stack-agnostic)
+# How Sideline links an STX account
 
-This describes the authorization-code + PKCE flow the demo implements, without
-reference to Bun, React, or any framework: so a Next.js, Python, or Go port is a
-matter of re-expressing these same steps.
+Sideline links a member's STX account with OAuth 2.0 (authorization code +
+PKCE), acts for them with scoped tokens, and reads public market data on its own
+token. This page walks through each part with the matching
+[`@stxapp/stx-typescript`](https://docs.stxapp.io/sdks/typescript/) call. The
+steps are plain HTTP, so they port to any stack.
 
 ## Roles
 
-- **Member (resource owner)**: the STX user whose account is being accessed.
-- **ISV app (client)**: the partner application (here, Sideline, a fictional
-  sports app used to demonstrate building on STX; not a real product or
-  company). It is a *confidential* client: it has a `client_secret` and a
-  server-side component that keeps tokens away from the browser. Another partner
-  app would be a **separate OAuth client** with its own `client_id`/`secret`, and
-  the same member linking from it would get an independent grant.
-- **STX (authorization + resource server)**: issues codes and tokens at
-  `/oauth/*`, and serves the API at `/api/v1/*` and the public market-data
-  WebSocket at `/socket`.
+- **Member's browser**: holds only a Sideline session cookie, never an STX token.
+- **Sideline backend**: a *confidential* OAuth client. It keeps the
+  `client_secret` and every STX token, and makes every call to STX.
+- **STX**: the authorization server (`/oauth/*`) and the API (`/api/v1/*`,
+  WebSocket at `/socket`).
 
-## This is account LINKING
+When an app is registered with STX it gets a `client_id`, a `client_secret`,
+its exact redirect URIs (no wildcards) and the scopes it may request. Sideline
+asks for `profile.read balance.read portfolio.read orders.read orders.write`.
+**No scope moves money**: deposits and withdrawals are never delegable.
 
-In the demo the member is already a signed-in ISV-app user (a Sideline customer
-with their own wallet). "Connecting" is **linking their STX account to that
-existing ISV user**: the flow below runs on a user action, and the resulting
-grant is stored against the ISV user, not against a bare session. So one ISV
-user has at most one STX link.
+In the SDK, the app is one `OAuthClient` built from those credentials. The app
+supplies two small stores over its own database: a `PendingAuthorizationStore`
+(PKCE verifier and state between the redirect and the callback) and a
+`TokenStore` (each member's tokens, keyed by the app's own user id).
 
-## Credentials, issued at registration
+## Linking an account
 
-When the ISV app is registered with STX it receives:
-
-- `client_id`: public identifier.
-- `client_secret`: confidential; only the backend ever holds it.
-- one or more **redirect URIs**: STX **exact-matches** the `redirect_uri` at both
-  `/authorize` and `/token`; there is no prefix or wildcard matching.
-- **allowed scopes**: the upper bound on what the app may ever request.
-
-## The flow
-
-```
- Member        ISV backend (confidential client)            STX
-   |                  |                                       |
-   | click Connect    |                                       |
-   |----------------->| 1. make PKCE verifier + challenge     |
-   |                  |    make state                         |
-   |                  |    store {state -> verifier, session} |
-   |   302 to STX     |                                       |
-   |<-----------------|                                       |
-   |  2. /oauth/authorize?response_type=code&client_id=...&redirect_uri=...
-   |     &scope=...&code_challenge=...&code_challenge_method=S256&state=...
-   |-------------------------------------------------------->|
-   |                  |         3. authenticate + consent     |
-   |   302 back to redirect_uri?code=...&state=...            |
-   |<--------------------------------------------------------|
-   | 4. /callback?code&state                                 |
-   |----------------->| verify state (single-use)            |
-   |                  | 5. POST /oauth/token                  |
-   |                  |    grant_type=authorization_code      |
-   |                  |    code, redirect_uri, code_verifier  |
-   |                  |    Authorization: Basic base64(id:secret)
-   |                  |-------------------------------------->|
-   |                  |    { access_token, refresh_token,     |
-   |                  |      expires_in, scope }              |
-   |                  |<--------------------------------------|
-   |                  | 6. store tokens server-side,          |
-   |                  |    keyed by local session cookie      |
-   |   302 to app     |                                       |
-   |<-----------------|                                       |
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Member's browser
+    participant S as Sideline backend
+    participant X as STX
+    B->>S: Link STX
+    S-->>B: Redirect to STX authorize
+    B->>X: Authorize request
+    X->>B: Sign in and consent
+    X-->>B: Redirect to Sideline callback
+    B->>S: Callback with code
+    S->>X: Exchange code for tokens
+    X-->>S: Access and refresh tokens
+    S-->>B: Linked
 ```
 
-### 1. PKCE (RFC 7636)
+1. The member, already signed in to Sideline, taps **Link your STX account**.
+2. The backend makes a PKCE verifier and its S256 challenge, plus a single-use
+   `state`, stores them, and redirects the browser to `/oauth/authorize` with
+   `response_type=code`, `client_id`, `redirect_uri`, `scope`, the challenge
+   and `state`.
+   SDK: `oauth.beginAuthorization(pendingStore, { data })` returns the `url`.
+3. The browser opens STX's authorize page.
+4. STX signs the member in and shows a consent screen naming the app and the
+   scopes. The member approves.
+5. STX redirects to the app's `redirect_uri` with `code` and `state` (or an
+   `error`).
+6. The backend checks `state` against the flow it started and consumes it, so
+   a replayed or forged callback fails.
+   SDK: `readCallback(pendingStore, callbackUrl)`, which throws
+   `STXOAuthException` on an error or a bad state.
+7. The backend POSTs to `/oauth/token` with `grant_type=authorization_code`,
+   the `code`, the same `redirect_uri` and the PKCE verifier, authenticated
+   with HTTP Basic (`client_id:client_secret`).
+8. STX returns `access_token`, `refresh_token`, `expires_in` and `scope`. The
+   backend stores them against the Sideline user.
+   SDK (7 and 8): `oauth.redeemAuthorization(callback, { store: tokens, memberKey })`.
+9. The backend sends the browser back to the app, now linked.
 
-Before redirecting, the client generates:
+PKCE means a code intercepted on the redirect is useless without the verifier,
+which never leaves the backend.
 
-- `code_verifier`: a high-entropy random string (32 random bytes, base64url).
-- `code_challenge` = base64url(SHA-256(`code_verifier`)).
-- `code_challenge_method` = `S256`. **`plain` is not used**: it offers no
-  protection if the authorize request is intercepted, and STX rejects it.
+## Calling STX for the member
 
-The verifier is kept server-side (never sent in step 2) and presented only at the
-token exchange (step 5). This proves the party redeeming the code is the same
-party that started the flow, so a code intercepted in the redirect is useless on
-its own.
-
-### 2. Authorize request
-
-The browser is redirected to `/oauth/authorize` with `response_type=code`,
-`client_id`, the exact `redirect_uri`, the space-delimited `scope`, the
-`code_challenge` (+ method), and an opaque **`state`**. `state` is a single-use,
-unguessable value tying the callback back to this specific login attempt; it
-defeats CSRF and cross-session code injection.
-
-### 3. Authenticate + consent
-
-STX authenticates the member and shows a consent screen naming the app and the
-scopes. STX narrows the requested scopes to the intersection of the client's
-allowed scopes and what the member approves. **No scope moves money**: deposits,
-withdrawals, and transfers are never delegable to an ISV.
-
-### 4–5. Callback + token exchange
-
-STX redirects to `redirect_uri?code=...&state=...`. The client:
-
-1. verifies `state` matches a flow it started, and consumes it (single-use);
-2. POSTs to `/oauth/token` with `grant_type=authorization_code`, the `code`, the
-   same `redirect_uri`, and the `code_verifier`, authenticating itself with
-   **`client_secret_basic`** (`Authorization: Basic base64(client_id:secret)`).
-
-STX returns `access_token`, `refresh_token`, `expires_in`, and `scope`.
-
-### 6. Token storage
-
-Tokens are stored **server-side**, keyed to a local session cookie. The browser
-holds only that opaque session id: never a token. All calls to STX are made by
-the backend, attaching `Authorization: Bearer <access_token>`.
+`oauth.memberClient(tokens, memberKey)` returns an `STX` client that sends
+`Authorization: Bearer <access_token>` on every call, for example
+`stx.balance()`, `stx.placeOrder(...)`, `stx.cancelOrder(id)`,
+`stx.orders()`, `stx.fills()` and `stx.settlements()`. Request and response
+formats are in the [API reference](https://docs.stxapp.io/).
 
 ## Refresh
 
-Access tokens are short-lived. When STX returns **401**, the client uses the
-refresh token once:
-
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Sideline backend
+    participant X as STX
+    S->>X: API call with access token
+    X-->>S: 401 (token expired)
+    S->>X: Refresh token grant
+    X-->>S: New access and refresh tokens
+    S->>X: Retry the call once
 ```
-POST /oauth/token
-grant_type=refresh_token
-refresh_token=<current>
-Authorization: Basic base64(client_id:secret)
+
+1. The backend calls STX with the member's access token, which has expired.
+   (The SDK also refreshes shortly before expiry, without waiting for a `401`.)
+2. STX answers `401`.
+3. The backend POSTs `grant_type=refresh_token` with the current refresh token,
+   authenticated with HTTP Basic.
+4. STX **rotates** the refresh token: it returns a new pair and the old refresh
+   token stops working. The backend stores the new pair.
+5. The backend retries the original call once.
+
+The SDK does all of this inside `memberClient`, once per member even when
+several calls fail together. Presenting an old refresh token is treated as
+theft and revokes the whole grant. If STX refuses the refresh, the SDK deletes
+the stored tokens and throws `STXGrantRevokedException`; Sideline then shows the
+member as not linked.
+
+## Unlinking
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Member's browser
+    participant S as Sideline backend
+    participant X as STX
+    B->>S: Unlink
+    S->>X: Revoke refresh token
+    S->>S: Delete stored tokens
+    S-->>B: Not linked
 ```
 
-STX **rotates** the refresh token: the response carries a new refresh token and
-the old one is invalidated. The client must persist the new pair and retry the
-original request once. Presenting an already-rotated refresh token is treated as
-theft and revokes the whole grant, so never keep the old one.
+1. The member taps **Unlink**.
+2. The backend POSTs the refresh token to `/oauth/revoke` (RFC 7009) with HTTP
+   Basic. Revoking the refresh token ends the whole grant at once.
+3. The backend deletes its copy of the tokens, whether or not STX answered.
+   The Sideline user and wallet stay, so the member can link again.
+4. The browser shows the account as not linked.
 
-## Revoke
+SDK: `oauth.unlink(tokens, memberKey)`. STX tokens are opaque and checked on
+every call, so revocation takes effect on the next request.
 
-Unlinking the STX account should end access immediately, not at token expiry.
-The client:
+## Market data on the app's own token
 
-1. best-effort calls `/oauth/revoke` (RFC 7009) with the token, using **that
-   app's** `client_secret_basic`, and
-2. deletes the local grant (the ISV user + wallet remain, so they can relink).
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Member's browser
+    participant S as Sideline backend
+    participant X as STX
+    S->>X: Client credentials grant (market_data)
+    X-->>S: App token
+    S->>X: Markets over REST, market channels over WebSocket
+    S-->>B: Relay over Server-Sent Events
+```
 
-Because STX tokens are server-referenced (not self-validating JWTs), revocation
-takes effect on the very next call. An operator can also revoke a partner's grant
-centrally, which invalidates every token issued under it at once.
+1. The backend mints an app token with `grant_type=client_credentials` and
+   scope `market_data`, authenticated with HTTP Basic. No member is involved.
+2. STX returns the app token.
+3. The backend reads markets with `GET /api/v1/markets` and joins the public
+   channels (`ticker`, `orderbook`, `trades`, `market_stats`, and
+   `market:<id>` for live scores) on a socket authenticated with that token.
+4. It relays what it receives to the browser over Server-Sent Events.
 
-## Public market data: an app token, no member
+SDK: `oauth.appClient("market_data")` returns an `STX` client that mints and
+reuses the app token: `catalog.markets(...)`, then `catalog.websocket()` and
+`ws.ticker()`, `ws.orderbook(ids)`, `ws.trades(...)`, `ws.marketStats(ids)`,
+`ws.market(id)`.
 
-Market data needs no member. The backend mints its own **app token** with the
-`client_credentials` grant (scope `market_data`, `client_secret_basic`), reads
-the catalog over REST (`GET /api/v1/markets`) and joins the public market
-channels (`ticker`, `orderbook`, `trades`, `market_stats`, `market:<id>`) on a
-socket authenticated with that token. It relays what it receives to the browser
-over Server-Sent Events. The browser opens no STX socket and holds no token.
+## The member's live data
 
-## Endpoint summary
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Member's browser
+    participant S as Sideline backend
+    participant X as STX
+    B->>S: Open live stream
+    S->>X: Open socket with member token
+    S->>X: Join balance, orders, fills, positions
+    X-->>S: Snapshots, then changes
+    S-->>B: Relay over Server-Sent Events
+```
 
-| Purpose            | Method          | Path (default)                            | Auth                        |
-| ------------------ | --------------- | ----------------------------------------- | --------------------------- |
-| Metadata (RFC 8414)| GET             | `/.well-known/oauth-authorization-server` | none                        |
-| Authorize          | GET             | `/oauth/authorize`                        | member session on STX       |
-| Token / refresh    | POST            | `/oauth/token`                            | `client_secret_basic`       |
-| Revoke             | POST            | `/oauth/revoke`                           | `client_secret_basic`       |
-| Identity           | GET             | `/api/v1/me`                              | `Bearer` (scope `profile.read`) |
-| Balance            | GET             | `/api/v1/account/balance`                 | `Bearer` (scope `balance.read`)  |
-| List orders        | GET             | `/api/v1/orders`                          | `Bearer` (scope `orders.read`)  |
-| Place order        | POST            | `/api/v1/orders`                          | `Bearer` (scope `orders.write`)    |
-| Cancel order       | DELETE          | `/api/v1/orders/:id`                      | `Bearer` (scope `orders.write`)    |
-| App token          | POST            | `/oauth/token` (`client_credentials`)     | `client_secret_basic`       |
-| Public market data | GET, WS         | `/api/v1/markets`, `/socket` channels     | `Bearer` app token (scope `market_data`) |
-| Member live feed   | WS              | `/socket` → `balances:`/`orders:`/`fills:`/`positions:` | `x-stx-oauth-token` header |
+1. The browser opens `GET /api/stream` on the Sideline backend.
+2. The backend opens an STX socket with the member's access token in the
+   `x-stx-oauth-token` header. Browsers cannot set WebSocket headers, and must
+   not hold the token anyway, so the socket lives on the backend.
+3. It joins the member's `balances`, `orders`, `fills` and `positions` topics.
+   Each join needs its scope; a topic the grant does not cover is refused on
+   its own and the rest still stream.
+4. STX sends a snapshot on join, then every change.
+5. The backend relays each change to the browser.
 
-All paths are configurable via environment variables; the defaults above match
-STX today.
+SDK: `stx.websocket()` on the member client, then `ws.accountView({ onChange })`,
+which joins the four topics and keeps one merged view of the account. A refused
+join throws `STXChannelException`. The SDK reconnects and rejoins after a drop.
 
-## Scope vocabulary
+## More
 
-STX's fixed scope set is `profile.read balance.read portfolio.read orders.read
-transfers.read orders.write terms.write`. Each is a coarse capability bundle, not one
-endpoint. `orders.write` is the only write scope over the order book;
-`transfers.read` is **read-only** deposit /
-withdrawal history: **no scope moves money**. Scope is space-delimited on the
-wire, and STX enforces it per request on REST requests and channel joins. The
-demo defaults to `profile.read balance.read portfolio.read orders.read orders.write`.
-
-## Placing an order
-
-`POST /api/v1/orders` takes a JSON body with these fields,
-**not** a generic `{market_id, side, price, quantity}`:
-
-- `market_id`: required.
-- `order_type`: required, `"limit"` | `"market"`.
-- `action`: required, `"buy"` | `"sell"` (this is the field named `action`, not
-  `side`).
-- `price`: a dollar **string**, e.g. `"40.00"`; required for `limit`, omitted
-  for `market`. A JSON number is rejected `400` (it would be misread as subunits).
-- `quantity`: a decimal **string**, e.g. `"100"`. A JSON number is rejected `400`.
-
-## OAuth over the WebSocket
-
-STX authenticates a socket with an access token in the `x-stx-oauth-token`
-header on the WebSocket handshake. A browser cannot set WebSocket headers (and
-must never hold the token anyway), so the backend opens the socket: one per
-linked member for the account topics (`balances:<uid>`, `orders:<uid>`,
-`fills:<uid>`, `positions:<uid>`, each gated by its scope), and one per market
-subscription on the app token. Both are relayed to the browser over SSE.
-
-## The same flow with the TypeScript SDK
-
-Sideline runs every step above through the STX TypeScript SDK,
-[`@stxapp/stx-typescript`](https://docs.stxapp.io/sdks/typescript/). Its
-`/oauth` entry point implements the client side of this flow, so the app code is
-one call per step:
-
-| Step | SDK call (from `@stxapp/stx-typescript/oauth`) |
-| ---- | ---------------------------------------------- |
-| 1-2. PKCE, state, authorize URL | `oauth.beginAuthorization(pendingStore, { data })` returns `{ url }` to redirect to |
-| 4. Callback: `?error`, `state` check (single use) | `readCallback(pendingStore, callbackUrl)`, throws `STXOAuthException` |
-| 5-6. Token exchange and storage | `oauth.redeemAuthorization(callback, { store: tokens, memberKey })` |
-| Calls as the member, refresh on expiry or `401` | `oauth.memberClient(tokens, memberKey)`, an `STX` client |
-| A refresh STX refuses (revoked grant) | the stored tokens are deleted and `STXGrantRevokedException` is thrown |
-| Revoke | `oauth.unlink(tokens, memberKey)` |
-| App token (`client_credentials`) | `oauth.appClient("market_data")`, an `STX` client on the app's token |
-| Member socket (`x-stx-oauth-token`) | `stx.websocket()` on the member client, then `ws.accountView()` |
-
-`oauth` is one `OAuthClient` built from the app's client id, secret, redirect
-URI and scopes. `pendingStore` and `tokens` are the app's implementations of the
-SDK's `PendingAuthorizationStore` and `TokenStore` interfaces, over whatever
-database the app already has. See
-[`node-react/backend/src/stx.ts`](../node-react/backend/src/stx.ts) for
-Sideline's, and <https://docs.stxapp.io/sdks/> for the SDKs in other languages.
+- TypeScript SDK reference: <https://docs.stxapp.io/sdks/typescript/>
+- All STX SDKs: <https://docs.stxapp.io/sdks/>
+- Sideline's SDK wiring: [`node-react/backend/src/stx.ts`](../node-react/backend/src/stx.ts)
