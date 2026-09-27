@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, openStxPopup, type MeState, type PublicApp } from "./api";
+import { api, BACKEND, openStxPopup, type MeState, type PublicApp } from "./api";
 import { marketLabel, setStxUrl, stxUrl, type MarketBrief, type MarketSummary } from "./publicMarketData";
 import { IsvLogo } from "./components/IsvLogo";
 import { SignIn } from "./components/SignIn";
@@ -156,10 +156,12 @@ export function App() {
 
   // Receive the linking result from the OAuth popup (/callback relays it via
   // postMessage, then closes itself: see startLink). Only messages from this
-  // same origin are trusted; the popup shares the ISV origin with this window.
+  // app's own origin or its backend's are trusted: deployed they are the same
+  // origin; in local development the popup is served by the backend (:8787).
   useEffect(() => {
+    const trusted = [window.location.origin, new URL(BACKEND, window.location.href).origin];
     function onLinkMessage(e: MessageEvent) {
-      if (e.origin !== window.location.origin) return;
+      if (!trusted.includes(e.origin)) return;
       const data = e.data as { type?: string; status?: string; error?: string } | null;
       if (!data || data.type !== "stx-link") return;
       if (data.status === "linked") {

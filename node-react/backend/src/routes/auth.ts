@@ -18,9 +18,12 @@ export const authRoutes = new Hono();
 
 // Finish the linking flow. The flow runs in a POPUP (see startLink), so instead
 // of a 302 we return a tiny page that relays the outcome to the opener via
-// postMessage and closes itself. Both windows share the ISV origin, so the
-// popup uses its own window.location.origin as the postMessage target: no
-// server-side origin guess (which would be wrong behind the ALB). If the page
+// postMessage and closes itself. Deployed, both windows share the ISV origin,
+// so the popup targets its own window.location.origin: no server-side origin
+// guess (which would be wrong behind the ALB). In local development the app
+// runs on FRONTEND_URL (Vite, :5173) and this page on the backend (:8787), so
+// it also posts to FRONTEND_URL's origin; a target that does not match the
+// opener is dropped by the browser, so posting to both is safe. If the page
 // was opened top-level (popup blocked, or hit directly), there is no opener, so
 // it falls back to the original redirect and behaves exactly as before.
 function finishLink(c: Context, query: string) {
@@ -47,7 +50,8 @@ function finishLink(c: Context, query: string) {
   var q = ${JSON.stringify(query)};
   try {
     if (window.opener && !window.opener.closed) {
-      window.opener.postMessage(msg, window.location.origin);
+      var targets = [window.location.origin, ${JSON.stringify(new URL(config.frontendUrl).origin)}];
+      targets.forEach(function(t, i){ if (targets.indexOf(t) === i) window.opener.postMessage(msg, t); });
       setTimeout(function(){ try { window.close(); } catch (e) {} }, 250);
       return;
     }
