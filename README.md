@@ -114,7 +114,7 @@ Open <http://localhost:5173>:
 
 Every call the backend makes to STX goes through the STX TypeScript SDK,
 [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript)
-(0.4.2 or later). The SDK reference is at
+(0.6.0 or later). The SDK reference is at
 <https://docs.stxapp.io/sdks/typescript/>; all the STX SDKs are listed at
 <https://docs.stxapp.io/sdks/>. The wiring lives in
 [`node-react/backend/src/stx.ts`](node-react/backend/src/stx.ts).
@@ -224,7 +224,7 @@ own token (`client_credentials`, scope `market_data`):
 | ---- | ------------------- |
 | Markets, teams, event status and start | `GET /api/v1/markets` (`participants`, `event_status`, `event_start`, `question`) |
 | Sport icons | the exchange's `GET /api/images/categories/standard/<sport>.svg` |
-| Live score and clock | the `market:<id>` channel (`ws.market()`, SDK 0.4.2): its join reply and `market_update` carry `event_brief`, e.g. `CHC 3 - 4 BOS : Bottom 8th 1 Outs` |
+| Live score and clock | the `market:<id>` channel (`ws.market()`): its join reply and `market_update` carry `event_brief`, e.g. `CHC 3 - 4 BOS : Bottom 8th 1 Outs` |
 | Prices, book, trades, price history | `ticker`, `orderbook`, `trades`, `market_stats` channels |
 
 The backend joins `market:<id>` for one market per live game (and each betslip
