@@ -29,6 +29,8 @@ export function IsvLogo({ appId, name, brandColor }: { appId?: string; name: str
         </span>
       )}
       <span className="isv-name">{name}</span>
+      {/* Sideline is a sample app, said on every page so nobody takes it for a real product. */}
+      <span className="demo-badge">Demo app</span>
     </span>
   );
 }

@@ -4,7 +4,7 @@ import { marketLabel, setStxUrl, stxUrl, type MarketBrief, type MarketSummary } 
 import { IsvLogo } from "./components/IsvLogo";
 import { SignIn } from "./components/SignIn";
 import { Wallets } from "./components/Wallets";
-import { Connection } from "./components/Connection";
+import { AccountMenu } from "./components/AccountMenu";
 import { LiveFeed } from "./components/LiveFeed";
 import { Betslip, type BetslipLeg } from "./components/Betslip";
 import { ActivityPanel } from "./components/ActivityPanel";
@@ -278,27 +278,18 @@ export function App() {
           </nav>
         )}
         <div className="topbar-right">
-          {me?.user && app && (
-            <Connection app={app} link={me.link} onChanged={afterAuthChange} />
-          )}
           {me?.user && linked && (
             <button
               type="button"
               className="header-deposit"
+              aria-label="Deposit at STX"
               onClick={() =>
                 openStxPopup(`${stxUrl()}/player/deposit_funds`, "stx_deposit", { w: 540, h: 780 })
               }
             >
-              <span aria-hidden="true">+</span> Deposit
+              <span aria-hidden="true">+</span>
+              <span className="deposit-text">Deposit</span>
             </button>
-          )}
-          {me?.user && (
-            <div className="whoami">
-              <span className="whoami-name">{me.user.name}</span>
-              <button className="link" onClick={handleSignout}>
-                Sign out
-              </button>
-            </div>
           )}
           <SourceIconLink />
           <button
@@ -312,6 +303,15 @@ export function App() {
           >
             {theme === "light" ? "☀" : theme === "dark" ? "☾" : "◐"}
           </button>
+          {me?.user && app && (
+            <AccountMenu
+              app={app}
+              user={me.user}
+              link={me.link}
+              onChanged={afterAuthChange}
+              onSignOut={handleSignout}
+            />
+          )}
         </div>
       </header>
 

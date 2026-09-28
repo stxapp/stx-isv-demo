@@ -80,14 +80,6 @@ body {
   flex: none;
 }
 
-.whoami {
-  margin-left: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  font-size: 12px;
-}
 
 .columns {
   display: grid;
@@ -878,20 +870,11 @@ code {
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.whoami {
-  display: flex;
-  align-items: center;
   gap: 10px;
-  font-size: 13px;
+  margin-left: auto;
 }
 
-.whoami-name {
-  color: var(--text);
-  font-weight: 500;
-}
+
 
 .layout {
   display: grid;
@@ -1492,41 +1475,6 @@ code {
 .betslip-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
 .tag-prop { color: var(--accent); }
 
-/* connection status as a header chip with a dropdown */
-.conn-chip-wrap { position: relative; }
-.conn-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.conn-chip:hover { border-color: var(--muted); }
-.conn-chip .conn-info { color: var(--muted); font-size: 12px; }
-.conn-pop {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 50;
-  width: 300px;
-  padding: 12px 14px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, .35);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-}
-.conn-pop p { margin: 2px 0; font-size: 12px; }
-
 .betslip-empty p { margin: 8px 0 4px; font-size: 13px; }
 .betslip-count-zero { background: var(--border); color: var(--muted); }
 
@@ -1979,7 +1927,6 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 .icon-btn:hover { border-color: var(--brand); color: var(--brand); }
 .icon-btn:focus-visible,
 .source-foot-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.topbar-right .source-link { margin-right: -8px; } /* pairs it with the theme toggle */
 .foot-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .source-foot-link {
   display: inline-flex;
@@ -1992,6 +1939,85 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 .source-foot-link:hover { color: var(--text); }
 .foot-links .powered-by { margin: 0; }
 /* Signed in on a phone the header holds more controls; let them wrap, never overflow. */
-@media (max-width: 700px) {
-  .topbar-right { flex-wrap: wrap; row-gap: 10px; }
+/* "Demo app" beside the wordmark, on every page. */
+.demo-badge {
+  align-self: center; margin-left: 6px; padding: 3px 8px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; line-height: 1.2;
+  white-space: nowrap; color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
 }
+
+/* Account menu: avatar button in the header, panel below it. */
+.account { position: relative; }
+.account-btn {
+  position: relative; display: inline-flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 10px 0 0; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.account-btn:hover { border-color: var(--brand); }
+.account-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.account-name { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-caret { font-size: 10px; color: var(--muted); }
+.account-linked-dot {
+  position: absolute; left: 23px; top: 23px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--pos); box-shadow: 0 0 0 2px var(--bg);
+}
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%;
+  color: #fff; font-weight: 500; letter-spacing: .02em; line-height: 1; user-select: none;
+  background: linear-gradient(145deg, hsl(var(--avatar-hue) 60% 52%), hsl(var(--avatar-hue) 55% 38%));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
+}
+.avatar-md { width: 32px; height: 32px; font-size: 12.5px; }
+.avatar-lg { width: 40px; height: 40px; font-size: 15px; }
+.account-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 60;
+  width: min(300px, calc(100vw - 32px));
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3); text-align: left; overflow: hidden;
+}
+:root[data-theme="light"] .account-pop { box-shadow: 0 10px 30px rgba(14, 23, 38, .14); }
+.account-who { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.account-who-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; }
+.account-who-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-section { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-top: 1px solid var(--border); }
+.account-section p { margin: 0; font-size: 12px; }
+.account-section .scopes-inline { font-family: inherit; font-weight: 400; color: var(--text); }
+.account-status .dot { background: var(--muted); }
+.account-status .dot-on { background: var(--pos); }
+.account-status { display: flex; align-items: center; gap: 7px; font-size: 13px !important; font-weight: 500; color: var(--text); }
+.account-section .unlink-btn { margin-top: 6px; align-self: flex-start; }
+.account-signout {
+  display: block; width: 100%; padding: 11px 14px; border: 0; border-top: 1px solid var(--border);
+  background: transparent; color: var(--text); font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer;
+}
+.account-signout:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.account-signout:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+
+/* Header on narrower screens (after the base rules so these win). */
+@media (max-width: 700px) {
+  .topbar { row-gap: 10px; }
+  .topbar-nav { order: 3; flex-basis: 100%; margin: 0 -4px; }
+  .topbar-right { gap: 8px; }
+  .account-name, .account-caret { display: none; }
+  .account-btn { padding: 0; border-color: transparent; }
+  .header-deposit { padding: 6px 12px; }
+  /* One row for brand and actions: the badge goes under the wordmark and the
+     GitHub icon leaves the header (the footer keeps "Source on GitHub"). */
+  .isv-logo { display: grid; grid-template-columns: auto auto; column-gap: 6px; row-gap: 3px; align-items: center; }
+  .isv-logo-mark, .isv-mark { grid-row: span 2; }
+  .isv-name { font-size: 24px; }
+  .demo-badge { margin-left: 0; justify-self: start; padding: 1px 6px; font-size: 9.5px; }
+  .topbar-right .source-link { display: none; }
+}
+@media (max-width: 360px) {
+  .header-deposit { width: 34px; height: 34px; padding: 0; justify-content: center; }
+  .header-deposit .deposit-text { display: none; }
+}
+@media (max-width: 960px) {
+  .account-name, .account-caret { display: none; }
+  .account-btn { padding: 0; border-color: transparent; }
+}
+
