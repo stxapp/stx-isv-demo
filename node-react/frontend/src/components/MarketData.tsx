@@ -10,7 +10,8 @@ import {
 import { subscribeBriefs, subscribeTicker, type FeedStatus } from "../marketFeed";
 import { MarketBrowser } from "./MarketBrowser";
 import { OrderBook } from "./OrderBook";
-import { TradesFeed } from "./TradesFeed";
+import { TradeChart } from "./TradeChart";
+import { TradesFeed, useMarketTrades } from "./TradesFeed";
 
 // Public market-data browsing. The browser talks only to the ISV backend now:
 // the catalog over GET /api/markets, the live feeds over the backend's SSE proxy
@@ -183,11 +184,23 @@ export function MarketData({
               </button>
             </div>
             {/* key forces a clean resubscribe when the market changes */}
-            <OrderBook key={`ob-${selectedId}`} marketId={selectedId!} />
-            <TradesFeed key={`tr-${selectedId}`} marketId={selectedId!} />
+            <MarketDetail key={`md-${selectedId}`} market={selectedMarket} />
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+// The modal body for one market: its price chart and trade tape (one shared
+// trades subscription) around the live order book.
+function MarketDetail({ market }: { market: MarketSummary }) {
+  const { trades, loading } = useMarketTrades(market.marketId);
+  return (
+    <>
+      <TradeChart trades={trades} loading={loading} maxPriceCents={market.maxPrice} />
+      <OrderBook marketId={market.marketId} />
+      <TradesFeed trades={trades} loading={loading} />
     </>
   );
 }
