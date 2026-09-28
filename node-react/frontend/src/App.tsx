@@ -11,6 +11,7 @@ import { ActivityPanel } from "./components/ActivityPanel";
 import { MyActivity, type ActivityTab } from "./components/MyActivity";
 import { MarketData } from "./components/MarketData";
 import { PoweredByStx } from "./components/PoweredByStx";
+import { SourceFootLink, SourceIconLink } from "./components/SourceLink";
 import { LiveAccountProvider, useLiveAccountStream } from "./liveAccount";
 
 const THEME_KEY = "stx_isv_theme";
@@ -299,6 +300,7 @@ export function App() {
               </button>
             </div>
           )}
+          <SourceIconLink />
           <button
             type="button"
             className="theme-toggle"
@@ -383,7 +385,10 @@ export function App() {
           </p>
           <p className="muted">Markets, scores, orders and balances are real STX preview data.</p>
         </div>
-        <PoweredByStx />
+        <div className="foot-links">
+          <SourceFootLink />
+          <PoweredByStx />
+        </div>
       </footer>
     </div>
     </LiveAccountProvider>

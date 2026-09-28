@@ -1935,3 +1935,38 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
+
+/* Source on GitHub: a round icon button in the header (same box as the theme
+   toggle) and a text link in the footer beside "Powered by STX". */
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.icon-btn:hover { border-color: var(--brand); color: var(--brand); }
+.icon-btn:focus-visible,
+.source-foot-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.topbar-right .source-link { margin-right: -8px; } /* pairs it with the theme toggle */
+.foot-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.source-foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.source-foot-link:hover { color: var(--text); }
+.foot-links .powered-by { margin: 0; }
+/* Signed in on a phone the header holds more controls; let them wrap, never overflow. */
+@media (max-width: 700px) {
+  .topbar-right { flex-wrap: wrap; row-gap: 10px; }
+}
