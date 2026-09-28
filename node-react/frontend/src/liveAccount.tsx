@@ -63,6 +63,29 @@ const COPY: Record<string, string> = {
   "positions:updated_positions": "Position updated",
 };
 
+// The orders channel sends every order change as `new_open_order`; the
+// order's status says what happened.
+const ORDER_COPY: Record<string, string> = {
+  open: "Order resting on the book",
+  accepted: "Order resting on the book",
+  requested: "Order resting on the book",
+  partially_filled: "Order partly filled",
+  filled: "Order filled",
+  cancelled: "Order cancelled",
+  canceled: "Order cancelled",
+  rejected: "Order rejected",
+  expired: "Order expired",
+};
+
+function labelOf(c: { kind: LiveKind; event: string; snapshot: boolean; payload: unknown }): string | null {
+  if (c.snapshot) return null;
+  if (c.kind === "orders" && c.event === "new_open_order" && c.payload && typeof c.payload === "object") {
+    const status = String((c.payload as Row).status ?? "").toLowerCase();
+    if (ORDER_COPY[status]) return ORDER_COPY[status];
+  }
+  return COPY[`${c.kind}:${c.event}`] ?? null;
+}
+
 // A history refresh after a reconnect waits this long, so a burst of
 // reconnects (stream and socket together) reloads once.
 const RESYNC_DEBOUNCE_MS = 600;
@@ -135,7 +158,7 @@ export function useLiveAccountStream(enabled: boolean): LiveAccount {
       } catch {
         return;
       }
-      const label = c.snapshot ? null : (COPY[`${c.kind}:${c.event}`] ?? null);
+      const label = labelOf(c);
       setState((s) => {
         const next: LiveAccount = { ...s };
         if (c.state.balance !== undefined) next.balance = c.state.balance;
