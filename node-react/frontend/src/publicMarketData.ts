@@ -111,6 +111,20 @@ export async function fetchMarkets(limit = 500): Promise<MarketSummary[]> {
   return body.markets ?? [];
 }
 
+// A market's recent public trades (the last 15, newest first) from the backend
+// (GET /api/markets/:id/trades, the market's REST `recent_trades`), already in
+// the `trades` channel's row shape. The live feed only pushes trades made after
+// it joins, so this seeds the tape. Throws on a transport or upstream error.
+export async function fetchRecentTrades(marketId: string): Promise<TradeMsg[]> {
+  const res = await fetch(`${BACKEND}/api/markets/${encodeURIComponent(marketId)}/trades`, {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Recent trades responded ${res.status}`);
+  const body = (await res.json()) as { trades?: TradeMsg[] };
+  return body.trades ?? [];
+}
+
 // ---- Live channel payloads (dollar wire format) ---------------------------
 
 // One aggregated price level on the `orderbook` topic's "book" push. Every value
@@ -162,9 +176,10 @@ export interface TickerUpdate {
 // side: "buy" when the incoming order bought from the book, "sell" otherwise.
 export interface TradeMsg {
   market_id: string;
-  market_symbol: string;
-  event_id: string;
-  event_symbol: string | null;
+  // Absent on rows seeded from REST (GET /api/markets/:id/trades).
+  market_symbol?: string;
+  event_id?: string;
+  event_symbol?: string | null;
   price: string;
   quantity: string;
   action: "buy" | "sell";

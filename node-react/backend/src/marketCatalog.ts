@@ -175,3 +175,60 @@ export async function fetchCatalog(
 
   return { status: lastStatus, markets: markets.slice(0, opts.limit), firstPage };
 }
+
+// ---- recent trades ------------------------------------------------------------
+
+// One public trade in the `trades` channel's dollar wire format, so the browser
+// renders a REST-seeded row and a live push the same way. `action` is the
+// taker's side ("buy" bought from the book, "sell" sold into it).
+export interface RecentTradeRow {
+  market_id: string;
+  price: string;
+  quantity: string;
+  action: "buy" | "sell";
+  timestamp: string;
+  timestamp_us: number;
+}
+
+// A market's `recent_trades` (the last 15, newest first) -> trade rows. The REST
+// field names the side that TOOK liquidity (`buyer` / `seller`), which is the
+// channel's `buy` / `sell`. Rows without a price or time are dropped.
+export function toTradeRows(marketId: string, recent: unknown): RecentTradeRow[] {
+  if (!Array.isArray(recent)) return [];
+  const rows: RecentTradeRow[] = [];
+  for (const t of recent as Record<string, unknown>[]) {
+    const price = str(t?.price);
+    const timestamp = str(t?.timestamp);
+    if (!price || !timestamp) continue;
+    const us = num(t.timestamp_us) ?? Date.parse(timestamp) * 1000;
+    rows.push({
+      market_id: marketId,
+      price,
+      quantity: str(t.quantity) ?? "",
+      action: t.liquidity_taker === "seller" ? "sell" : "buy",
+      timestamp,
+      timestamp_us: us,
+    });
+  }
+  return rows.sort((a, b) => b.timestamp_us - a.timestamp_us);
+}
+
+export interface RecentTradesResult {
+  status: number;
+  trades: RecentTradeRow[];
+  // What STX returned (the market, or its error body): the activity row's detail.
+  body?: unknown;
+}
+
+// The market's last trades from `GET /api/v1/markets/{id}` with the app token.
+// The public `trades` channel only pushes NEW executions (its join reply carries
+// no history), so this is what the tape shows before the next trade.
+export async function fetchRecentTrades(app: AppProfile, marketId: string): Promise<RecentTradesResult> {
+  try {
+    const m = (await stxApp(app).catalog.market(marketId)) as unknown as Record<string, unknown>;
+    return { status: 200, trades: toTradeRows(marketId, m.recent_trades), body: { recent_trades: m.recent_trades ?? [] } };
+  } catch (err) {
+    const stxErr = stxErrorResponse(err);
+    return { status: stxErr?.status ?? 502, trades: [], body: stxErr?.body ?? { error: (err as Error).message } };
+  }
+}

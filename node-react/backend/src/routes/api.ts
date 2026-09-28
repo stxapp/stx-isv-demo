@@ -23,7 +23,7 @@ import { MARKET_DATA_SCOPE, memberClient, NotLinkedError, stxApp, stxErrorRespon
 import { sdkCalls } from "../sdkCall";
 import { streamSSE } from "hono/streaming";
 import { closeLiveFeed, liveBalance, subscribe, type LiveMessage } from "../liveProxy";
-import { fetchCatalog } from "../marketCatalog";
+import { fetchCatalog, fetchRecentTrades } from "../marketCatalog";
 import { MARKET_TOPICS, subscribeMarket, type MarketTopic } from "../marketProxy";
 
 export const apiRoutes = new Hono();
@@ -459,6 +459,36 @@ apiRoutes.get("/markets", async (c) => {
     return c.json({ error: "catalog_unavailable", markets: [] }, (status || 502) as never);
   }
   return c.json({ markets });
+});
+
+// GET /api/markets/:id/trades?app=<id> -> the market's recent public trades
+// (the last 15, newest first), in the `trades` channel's row shape. The live
+// `trades` feed only pushes executions that happen after the join, so the tape
+// is seeded from here and the feed keeps it current. App token, no member.
+apiRoutes.get("/markets/:id/trades", async (c) => {
+  const app = requireApp(c);
+  const marketId = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/i.test(marketId)) return c.json({ error: "bad_market_id" }, 400);
+  const { status, trades, body } = await fetchRecentTrades(app, marketId);
+  const ok = status >= 200 && status < 300;
+  activityStore.record({
+    ts: Date.now(),
+    appId: app.id,
+    method: "GET",
+    path: `${config.paths.markets}/${marketId}`,
+    status,
+    note: ok ? `Loaded ${trades.length} recent trades` : "Recent trades failed",
+    sdkCall: sdkCalls.market(MARKET_DATA_SCOPE, marketId),
+    detail: buildDetail({
+      method: "GET",
+      path: `${config.paths.markets}/${marketId}`,
+      status,
+      responseBody: body,
+      summary: ok ? `${trades.length} recent trades (market's recent_trades)` : "request failed",
+    }),
+  });
+  if (!ok) return c.json({ error: "trades_unavailable", trades: [] }, (status || 502) as never);
+  return c.json({ trades });
 });
 
 // GET /api/market-stream?app=<id>&topic=<t>&market_ids=<csv>&range=<r> -> Server-

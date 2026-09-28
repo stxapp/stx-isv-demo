@@ -254,6 +254,7 @@ no images from third parties.
 | `GET /api/trades`, `GET /api/settlements` | the member's fills and settled positions |
 | `GET /api/stream` | SSE: the member's live account (balance, orders, fills, positions) |
 | `GET /api/markets` | the public market catalog |
+| `GET /api/markets/:id/trades` | a market's recent public trades (its `recent_trades`), which seed the trades tape and price chart; the `trades` channel only pushes new trades |
 | `GET /api/market-stream?topic=` | SSE: `ticker`, `orderbook`, `trades`, `market_stats`, or `market` (live scores) |
 | `GET /api/activity`, `GET /api/activity/:id/detail` | the API calls log and one call's redacted detail |
 | `GET /login`, `GET /callback` | the OAuth account-linking flow |

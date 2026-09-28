@@ -62,6 +62,7 @@ export const sdkCalls = {
 
   markets: (scope: string, query: { status: string[]; limit: number }) =>
     `oauth.appClient(${lit(scope)}).markets(${lit(query)})`,
+  market: (scope: string, marketId: string) => `oauth.appClient(${lit(scope)}).market(${lit(shortId(marketId))})`,
 
   // ---- sockets ------------------------------------------------------------------
 
