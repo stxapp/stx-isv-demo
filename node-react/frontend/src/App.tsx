@@ -13,8 +13,19 @@ import { MarketData } from "./components/MarketData";
 import { PoweredByStx } from "./components/PoweredByStx";
 import { SourceFootLink, SourceIconLink } from "./components/SourceLink";
 import { LiveAccountProvider, useLiveAccountStream } from "./liveAccount";
+import { initAnalytics, track, trackPage } from "./analytics";
+import { ConsentBanner } from "./components/ConsentBanner";
 
 const THEME_KEY = "stx_isv_theme";
+
+// Virtual paths for page views (the app changes views without changing the URL).
+const VIEW_PATH: Record<"home" | "api" | ActivityTab, string> = {
+  home: "/",
+  orders: "/orders",
+  trades: "/trades",
+  settlements: "/settlements",
+  api: "/api-calls",
+};
 
 const NAV_LABEL: Record<ActivityTab, string> = {
   orders: "My orders",
@@ -115,6 +126,16 @@ export function App() {
     }
   }
 
+  // Optional analytics (see analytics.ts): on only when the backend sends a
+  // measurement id; the footer link reopens the consent choice.
+  const [analyticsOn, setAnalyticsOn] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  // A virtual page view per view; the API calls page is also an event.
+  useEffect(() => {
+    trackPage(VIEW_PATH[view], view === "home" ? "Markets" : view === "api" ? "API calls" : NAV_LABEL[view]);
+    if (view === "api") track("api_calls_view");
+  }, [view]);
+
   // The logo goes home: the markets list, no open game, an empty betslip.
   const [homeKey, setHomeKey] = useState(0);
   function goHome() {
@@ -132,8 +153,12 @@ export function App() {
     const linked = params.get("linked");
     if (err) setBanner({ kind: "error", text: ERROR_MESSAGES[err] ?? `OAuth error: ${err}` });
     else if (linked) setBanner({ kind: "ok", text: "STX account linked." });
+    // Drop only the app's own flags; anything else (utm_* campaign tags) stays
+    // for the landing page view.
     if (params.has("error") || params.has("linked") || params.has("app")) {
-      window.history.replaceState({}, "", window.location.pathname);
+      for (const k of ["error", "linked", "app"]) params.delete(k);
+      const rest = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
     }
 
     (async () => {
@@ -141,6 +166,8 @@ export function App() {
         const res = await api.app();
         setProfile(res.app);
         setStxUrl(res.stxPublicUrl);
+        initAnalytics(res.gaMeasurementId);
+        setAnalyticsOn(Boolean(res.gaMeasurementId));
       } catch {
         // app() failing means the backend is unreachable; leave the banner.
       }
@@ -166,8 +193,10 @@ export function App() {
       const data = e.data as { type?: string; status?: string; error?: string } | null;
       if (!data || data.type !== "stx-link") return;
       if (data.status === "linked") {
+        track("link_success");
         setBanner({ kind: "ok", text: "STX account linked." });
       } else if (data.error) {
+        track("link_error", { error: String(data.error).slice(0, 40) });
         setBanner({
           kind: "error",
           text: ERROR_MESSAGES[data.error] ?? `OAuth error: ${data.error}`,
@@ -283,9 +312,10 @@ export function App() {
               type="button"
               className="header-deposit"
               aria-label="Deposit at STX"
-              onClick={() =>
-                openStxPopup(`${stxUrl()}/player/deposit_funds`, "stx_deposit", { w: 540, h: 780 })
-              }
+              onClick={() => {
+                track("deposit_click");
+                openStxPopup(`${stxUrl()}/player/deposit_funds`, "stx_deposit", { w: 540, h: 780 });
+              }}
             >
               <span aria-hidden="true">+</span>
               <span className="deposit-text">Deposit</span>
@@ -384,12 +414,21 @@ export function App() {
             Sideline is a demo app built on the STX API. Not a real product.
           </p>
           <p className="muted">Markets, scores, orders and balances are real STX preview data.</p>
+          {analyticsOn && (
+            <p className="muted analytics-note">
+              Anonymous usage statistics with your consent.{" "}
+              <button type="button" className="link" onClick={() => setConsentOpen(true)}>
+                Usage statistics
+              </button>
+            </p>
+          )}
         </div>
         <div className="foot-links">
           <SourceFootLink />
           <PoweredByStx />
         </div>
       </footer>
+      <ConsentBanner reopen={consentOpen} onClose={() => setConsentOpen(false)} />
     </div>
     </LiveAccountProvider>
   );

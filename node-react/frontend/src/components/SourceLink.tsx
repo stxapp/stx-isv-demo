@@ -1,6 +1,8 @@
 // Link to this sample app's public source. The GitHub mark is inline SVG (no
 // icon dependency, no external image host) and takes the current text colour,
 // so it follows the light and dark themes.
+import { track } from "../analytics";
+
 export const SOURCE_URL = "https://github.com/stxapp/stx-isv-demo";
 
 function GitHubMark({ size = 16 }: { size?: number }) {
@@ -27,6 +29,7 @@ export function SourceIconLink() {
       href={SOURCE_URL}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() => track("source_click", { placement: "header" })}
       title="View the source on GitHub"
       aria-label="View the source on GitHub"
     >
@@ -38,7 +41,13 @@ export function SourceIconLink() {
 /** Text link for the footer, beside "Powered by STX". */
 export function SourceFootLink() {
   return (
-    <a className="source-foot-link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
+    <a
+      className="source-foot-link"
+      href={SOURCE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => track("source_click", { placement: "footer" })}
+    >
       <GitHubMark size={14} />
       <span>Source on GitHub</span>
     </a>

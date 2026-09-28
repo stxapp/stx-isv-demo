@@ -1,3 +1,4 @@
+import { track } from "../analytics";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { mergeById, useLiveAccount } from "../liveAccount";
@@ -124,6 +125,7 @@ export function Orders({
     setBusy(id);
     try {
       await api.cancelOrder(id);
+      track("order_cancel");
       onCancelled();
       // The live feed drops the order on its own; without it, reload.
       if (!liveAccount.live) load();

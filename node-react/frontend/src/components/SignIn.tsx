@@ -1,3 +1,4 @@
+import { track } from "../analytics";
 import { useState } from "react";
 import { api, type PublicApp } from "../api";
 
@@ -16,6 +17,7 @@ export function SignIn({ app, onSignedIn }: { app: PublicApp; onSignedIn: () => 
     setError(null);
     try {
       await api.login(name.trim() || undefined);
+      track("sign_in");
       onSignedIn();
     } catch (err) {
       setError(String(err));

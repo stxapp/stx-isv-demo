@@ -1,3 +1,4 @@
+import { track } from "../analytics";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { formatMoney, type MarketBrief, type MarketSummary } from "../publicMarketData";
@@ -156,6 +157,7 @@ export function Betslip({
         return o;
       });
       await api.placeBatch(orders);
+      track("order_place", { count: legs.length });
       setPlaced(legs.length);
       onChange([]);
       onPlaced();

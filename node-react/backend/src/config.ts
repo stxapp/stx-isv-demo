@@ -10,6 +10,8 @@
 // client. Its identity (client_id/secret/name/brand/scopes) is the app profile
 // below, read from CLIENT_ID/CLIENT_SECRET/APP_*.
 
+import { gaMeasurementIdFrom } from "./analytics";
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === "") {
@@ -100,6 +102,10 @@ export const config = {
 
   // This app's own public origin ("" when unset, e.g. local dev).
   publicUrl,
+
+  // Google Analytics 4 measurement id ("G-..."), or null: no analytics code
+  // is loaded at all. Sent to the browser at runtime (GET /api/app).
+  gaMeasurementId: gaMeasurementIdFrom(process.env.GA_MEASUREMENT_ID),
 
   // The one ISV app this backend presents as.
   app: sideline,

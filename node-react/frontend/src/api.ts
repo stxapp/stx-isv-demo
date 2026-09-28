@@ -1,6 +1,8 @@
 // Thin client for the ISV backend. Every call sends the session cookie
 // (`credentials: "include"`) so the backend can attach the right user's token.
 
+import { track } from "./analytics";
+
 export const BACKEND = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8787";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -96,6 +98,8 @@ export interface AppResponse {
   app: PublicApp;
   // The exchange's public origin (deposit popup, sport icons).
   stxPublicUrl?: string;
+  // Google Analytics 4 id when the deployment enables it, else null.
+  gaMeasurementId?: string | null;
 }
 
 export interface WalletState {
@@ -178,6 +182,7 @@ export function openStxPopup(url: string, name: string, size?: { w: number; h: n
 // Login/consent is a tall, narrow form; the deposit page (card form + methods)
 // wants a bit more room. Callers size each popup for its content.
 export function startLink(): void {
+  track("link_start");
   openStxPopup(`${BACKEND}/login`, "stx_link", { w: 460, h: 720 });
 }
 

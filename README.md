@@ -66,6 +66,7 @@ All configuration comes from the environment; nothing host-specific is built in:
 | `STX_PUBLIC_URL` | optional: the exchange as the browser sees it (deposit popup, sport icons); defaults to `STX_BASE_URL` |
 | `OAUTH_SCOPES` | scopes requested at `/oauth/authorize` |
 | `APP_ID`, `APP_NAME`, `APP_TAGLINE`, `APP_BRAND_COLOR`, `APP_WALLET_CENTS` | optional branding and the app's starting wallet |
+| `GA_MEASUREMENT_ID` | optional: a Google Analytics 4 id (`G-...`); unset, no analytics code loads. See [Analytics (optional)](#analytics-optional) |
 
 Then either:
 
@@ -91,8 +92,8 @@ Open <http://localhost:5173>:
    offers **Link your STX account**: Sideline opens STX in a popup to sign in
    and consent, then exchanges the code for tokens **server-side**.
 3. Linked, the betslip places orders on STX and the wallet shows your STX
-   balance live, with a chip for each change.
-4. **Unlink** from the account panel revokes the grant at STX.
+   balance live, with each change shown under it.
+4. **Unlink** from the account menu (your avatar, top right) revokes the grant at STX.
 
 ## Using the STX TypeScript SDK
 
@@ -244,7 +245,7 @@ no images from third parties.
 
 | Route | Purpose |
 | ----- | ------- |
-| `GET /api/app` | the app profile (no secrets) and the exchange's public URL |
+| `GET /api/app` | the app profile (no secrets), the exchange's public URL and the optional Google Analytics id |
 | `GET /api/me` | the app, signed-in user (and wallet), link status |
 | `POST /api/login` | mock sign-in (creates user and wallet) |
 | `POST /api/signout` | sign out (revoke and drop the link, remove the user) |
@@ -258,6 +259,28 @@ no images from third parties.
 | `GET /api/market-stream?topic=` | SSE: `ticker`, `orderbook`, `trades`, `market_stats`, or `market` (live scores) |
 | `GET /api/activity`, `GET /api/activity/:id/detail` | the API calls log and one call's redacted detail |
 | `GET /login`, `GET /callback` | the OAuth account-linking flow |
+
+## Analytics (optional)
+
+Sideline can report anonymous usage to Google Analytics 4. It is off unless
+you set `GA_MEASUREMENT_ID` (a `G-...` id) on the backend. The id reaches the
+browser at runtime through `GET /api/app`, so the same build serves every
+environment, and a fork sends nothing unless it sets its own id.
+
+- **Consent first.** With an id set, a small banner asks the visitor to accept
+  or decline. Nothing from Google loads until they accept. On accept, Consent
+  Mode v2 starts with all storage denied and grants `analytics_storage` only
+  (never ads storage). The choice is kept in `localStorage`; the footer's
+  "Usage statistics" link reopens it, and declining later stops collection.
+- **What is sent.** Page views for each view (Markets, My orders, My trades,
+  Settlements, API calls); the landing view keeps its URL, so `utm_*` campaign
+  tags are counted. Events: `sign_in`, `link_start`, `link_success`,
+  `link_error`, `order_place` (number of orders only), `order_cancel`,
+  `api_calls_view`, `deposit_click`, `source_click`.
+- **What is never sent.** Names, emails, STX account or user ids, order ids,
+  prices or balances.
+
+The code is `frontend/src/analytics.ts` and `frontend/src/components/ConsentBanner.tsx`.
 
 ## Known limitations
 
