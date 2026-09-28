@@ -1,0 +1,29 @@
+<svg viewBox="0 0 820 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="isv-flow-title isv-flow-desc" style="max-width:820px;width:100%;height:auto;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;"><rect x="0" y="0" width="820" height="600" fill="#0d1117"/>
+  <title id="isv-flow-title">The STX OAuth authorization code flow with PKCE</title>
+  <desc id="isv-flow-desc">Three lanes: the member's browser, your server-side client, and STX. Your server builds a PKCE challenge, redirects the member to STX to sign in and approve scopes, receives a single-use code at your redirect URI, exchanges that code and the verifier for an access and refresh token, then calls the API as the member with a bearer token.</desc>
+  <defs>
+    <marker id="isv-arrow" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="#d6d9e0"/></marker>
+    <marker id="isv-arrow-accent" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="#0B6BCB"/></marker>
+  </defs>
+  <g font-size="13" font-weight="600" text-anchor="middle">
+    <g><rect x="20" y="12" width="200" height="34" rx="8" fill="#22262f" stroke="#474d5a"/><text x="120" y="34" fill="#d6d9e0">Member · browser</text></g>
+    <g><rect x="290" y="12" width="220" height="34" rx="8" fill="#22262f" stroke="#0B6BCB"/><text x="400" y="34" fill="#d6d9e0">Your server · client</text></g>
+    <g><rect x="600" y="12" width="200" height="34" rx="8" fill="#22262f" stroke="#474d5a"/><text x="700" y="34" fill="#d6d9e0">STX</text></g>
+  </g>
+  <g stroke="#d6d9e0" stroke-opacity="0.28" stroke-dasharray="4 5"><line x1="120" y1="46" x2="120" y2="540"/><line x1="400" y1="46" x2="400" y2="540"/><line x1="700" y1="46" x2="700" y2="540"/>
+  </g>
+  <g font-size="12.5" fill="#d6d9e0">
+    <g><circle cx="400" cy="78" r="11" fill="#0B6BCB"/><text x="400" y="82" text-anchor="middle" font-weight="700" fill="#ffffff">1</text><rect x="300" y="92" width="200" height="36" rx="7" fill="#22262f" stroke="#474d5a"/><text x="400" y="107" text-anchor="middle">Build PKCE verifier +</text><text x="400" y="121" text-anchor="middle">challenge (S256)</text></g>
+    <g><circle cx="120" cy="190" r="11" fill="#0B6BCB"/><text x="120" y="194" text-anchor="middle" font-weight="700" fill="#ffffff">2</text><line x1="135" y1="190" x2="694" y2="190" stroke="#d6d9e0" marker-end="url(#isv-arrow)"/><text x="414" y="179" text-anchor="middle">Redirect to /oauth/authorize</text></g>
+    <g><rect x="600" y="224" width="200" height="36" rx="7" fill="#22262f" stroke="#474d5a"/><text x="700" y="239" text-anchor="middle">Member signs in and</text><text x="700" y="253" text-anchor="middle">approves scopes at STX</text></g>
+    <g><circle cx="700" cy="312" r="11" fill="#0B6BCB"/><text x="700" y="316" text-anchor="middle" font-weight="700" fill="#ffffff">3</text><line x1="685" y1="312" x2="406" y2="312" stroke="#d6d9e0" marker-end="url(#isv-arrow)"/><text x="545" y="301" text-anchor="middle">redirect_uri?code=…&amp;state=…</text></g>
+    <g><circle cx="400" cy="382" r="11" fill="#0B6BCB"/><text x="400" y="386" text-anchor="middle" font-weight="700" fill="#ffffff">4</text><line x1="415" y1="382" x2="694" y2="382" stroke="#0B6BCB" stroke-width="1.5" marker-end="url(#isv-arrow-accent)"/><text x="554" y="371" text-anchor="middle" fill="#4AA3FF">POST /oauth/token (code + verifier)</text></g>
+    <g><line x1="685" y1="422" x2="406" y2="422" stroke="#0B6BCB" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#isv-arrow-accent)"/><text x="545" y="411" text-anchor="middle" fill="#4AA3FF">access_token + refresh_token</text></g>
+    <g><circle cx="400" cy="492" r="11" fill="#0B6BCB"/><text x="400" y="496" text-anchor="middle" font-weight="700" fill="#ffffff">5</text><line x1="415" y1="492" x2="694" y2="492" stroke="#d6d9e0" marker-end="url(#isv-arrow)"/><text x="554" y="481" text-anchor="middle">GET /api/v1/… (Bearer access_token)</text></g>
+    <g><line x1="685" y1="532" x2="406" y2="532" stroke="#d6d9e0" stroke-dasharray="5 4" marker-end="url(#isv-arrow)"/><text x="545" y="521" text-anchor="middle">member data, or 403 out of scope</text></g>
+  </g>
+  <g>
+    <rect x="20" y="558" width="780" height="34" rx="8" fill="#0a2540" stroke="#0B6BCB" stroke-opacity="0.5"/>
+    <text x="34" y="579" font-size="12" fill="#d6d9e0"><tspan font-weight="600" fill="#4AA3FF">Returning member:</tspan> a prior grant skips the consent screen. Add prompt=none to reconnect silently.</text>
+  </g>
+</svg>

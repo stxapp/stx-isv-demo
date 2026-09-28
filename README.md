@@ -25,14 +25,10 @@ response.
 
 ## How it fits together
 
-```
- Browser (React)              App backend (Bun)                 STX
- ---------------              -----------------                 ---
- session cookie only  --->    confidential OAuth client  --->   OAuth 2.0
- no STX token                 holds client_secret and           REST /api/v1
-                              every STX token                   WebSocket channels
-                      <---    SSE: live account + market  <---
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/oauth-flow-dark.svg">
+  <img alt="How Sideline links an STX account: your server builds a PKCE challenge, the member signs in and approves scopes at STX, your server exchanges the code for tokens and calls the API with the access token" src="docs/oauth-flow-light.svg">
+</picture>
 
 - The **browser** talks only to the app backend, with an opaque session cookie.
 - The **backend** holds the `client_secret` and every STX token. It runs the
@@ -48,19 +44,7 @@ walks through it step by step so a port to Next.js, Python or Go is obvious.
 To run Sideline you need an OAuth client on the STX sandbox exchange (a client
 id, a client secret and your redirect URI), plus a sandbox member account to link.
 
-**Get sandbox credentials: sign in to the STX developer console with Google or
-GitHub and create an app.** The console is the STX developer console (link
-provided with your invite).
-
-1. Sign in with Google or GitHub. Your developer account is created on first
-   sign-in.
-2. Create an organization, then **Build an app**.
-3. Add `http://localhost:8787/callback` (or your deployed `<PUBLIC_URL>/callback`)
-   as a redirect URI and pick the member scopes Sideline uses.
-4. Creating the app issues its sandbox client. Copy the client id and secret
-   right away: the secret is shown once. Rotate it on the app's Credentials tab
-   if you lose it.
-5. The Credentials tab also shows the sandbox host to use as `STX_BASE_URL`.
+**Your sandbox credentials come with your STX invite:** the client id and secret, the sandbox host to use as `STX_BASE_URL`, and a sandbox member account to link. Tell us the redirect URI you will use: `http://localhost:8787/callback` for local runs, or your deployed `<PUBLIC_URL>/callback`. Sideline asks for the member scopes `profile.read balance.read portfolio.read orders.read orders.write` and the app scope `market_data`.
 
 ## Run it locally
 
@@ -237,8 +221,6 @@ no images from third parties.
 
 ## Architecture
 
-![Sideline architecture: browser, app backend (confidential OAuth client), STX exchange](docs/architecture.svg)
-
 - **Backend** (`node-react/backend`, Bun + Hono): holds the app's
   `client_secret` and every STX token, brokers the OAuth link flow, keeps the
   app's mock wallet, proxies member calls through the SDK, holds the STX sockets
@@ -315,7 +297,8 @@ stx-isv-demo/
   README.md
   LICENSE
   docs/oauth-flow.md          # stack-agnostic flow: authorize, consent, callback, token, refresh, revoke
-  docs/architecture.svg
+  docs/oauth-flow-light.svg   # the OAuth link flow (light and dark versions)
+  docs/oauth-flow-dark.svg
   node-react/
     .env.example
     docker-compose.yml        # backend + frontend (+ commented-out Postgres alternative)
