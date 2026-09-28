@@ -34,7 +34,8 @@ export interface LiveAccount {
   // Every order the socket reported this session, latest version, by id: the
   // history list merges these over its REST page.
   orderUpdates: Map<string, Row>;
-  // Incremental events worth showing in the "Live from STX" card, newest first.
+  // Incremental events worth showing in the "Live from STX" card, newest first,
+  // the last ITEMS_KEPT of them. The card reads only the ones it has not seen.
   items: FeedItem[];
   // Reconnects so far (stream or STX socket), debounced; history reloads on it.
   resyncs: number;
@@ -67,6 +68,9 @@ const COPY: Record<string, string> = {
 const RESYNC_DEBOUNCE_MS = 600;
 
 const KINDS: LiveKind[] = ["balances", "fills", "orders", "positions"];
+
+// Enough that a burst between two renders is never cut before the card sees it.
+const ITEMS_KEPT = 100;
 
 interface ChangeEvent {
   kind: LiveKind;
@@ -146,7 +150,7 @@ export function useLiveAccountStream(enabled: boolean): LiveAccount {
           }
         }
         if (label) {
-          next.items = [{ id: ++seq.current, kind: c.kind, label, ts: c.ts ?? Date.now() }, ...s.items].slice(0, 15);
+          next.items = [{ id: ++seq.current, kind: c.kind, label, ts: c.ts ?? Date.now() }, ...s.items].slice(0, ITEMS_KEPT);
         }
         return next;
       });

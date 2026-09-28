@@ -12,9 +12,9 @@ import { formatMoney } from "../publicMarketData";
 // Deposit lives in the header; funds are added at STX, never touched by the ISV.
 //
 // Every amount is shown in full, "$100,000.00": a wallet never abbreviates.
-// When the STX balance moves, a chip beside it says by how much ("▼ $24.75" in
+// When the STX balance moves, a line under it says by how much ("▼ $24.75" in
 // red, "▲ $12.40" in green) for four seconds, and the amount pulses once in the
-// same colour. With reduced motion the chip and colour still show, without the
+// same colour. That line is always reserved, so the row never changes size. With reduced motion the chip and colour still show, without the
 // animation.
 
 // STX dollar string ("12.3400") to whole cents, or null.
@@ -101,26 +101,29 @@ export function Wallets({
           <dd className="wallet-amount">{wallet ? formatMoney(wallet.isv.walletDollars) : "–"}</dd>
         </div>
 
-        <div className={`wallet-line wallet-line-stx${change ? ` moved moved-${change.dir}` : ""}`}>
+        <div className={`wallet-line wallet-line-stx${change ? ` moved-${change.dir}` : ""}`}>
           <dt>
             <span className="wallet-dot wallet-dot-stx" aria-hidden="true" />
             STX balance
           </dt>
           {stxLinked ? (
             <dd className="wallet-amount-wrap">
-              {change && (
-                <span
-                  key={change.id}
-                  className={`balance-chip balance-chip-${change.dir}`}
-                  role="status"
-                  aria-label={`STX balance ${change.dir === "down" ? "down" : "up"} ${formatMoney(change.cents / 100)}`}
-                >
-                  <span aria-hidden="true">{change.dir === "down" ? "▼" : "▲"}</span>
-                  {formatMoney(change.cents / 100)}
-                </span>
-              )}
-              <span key={change?.id ?? 0} className={`wallet-amount${change ? ` pulse-${change.dir}` : ""}`}>
+              {/* Keys differ between the two spans: sharing one key made React
+                  keep stale chips when the balance moved several times a second. */}
+              <span key={`amount-${change?.id ?? 0}`} className={`wallet-amount${change ? ` pulse-${change.dir}` : ""}`}>
                 {cashCents !== null ? formatMoney(cashCents / 100) : "–"}
+              </span>
+              <span className="balance-delta" role="status">
+                {change && (
+                  <span
+                    key={`delta-${change.id}`}
+                    className={`balance-chip balance-chip-${change.dir}`}
+                    aria-label={`STX balance ${change.dir === "down" ? "down" : "up"} ${formatMoney(change.cents / 100)}`}
+                  >
+                    <span aria-hidden="true">{change.dir === "down" ? "▼" : "▲"}</span>
+                    {formatMoney(change.cents / 100)}
+                  </span>
+                )}
               </span>
             </dd>
           ) : (
