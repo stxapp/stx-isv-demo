@@ -23,13 +23,15 @@
   --warn: #f5a524;
   /* The active ISV app's brand accent, set by App.tsx. */
   --brand: #3d8bff;
-  --display: "Barlow Condensed", "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
   font-family: Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * {
   box-sizing: border-box;
 }
+
+/* Form controls use the page font, not the browser default. */
+button, input, select, textarea { font-family: inherit; }
 
 body {
   margin: 0;
@@ -672,7 +674,6 @@ code {
 .wallet-amount {
   font-size: 18px;
   font-weight: 600;
-  font-family: ui-monospace, SFMono-Regular, monospace;
   font-variant-numeric: tabular-nums;
 }
 
@@ -853,10 +854,9 @@ code {
 }
 
 .isv-name {
-  font-family: var(--display);
-  font-size: 27px;
+  font-size: 22px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
   line-height: 1;
   color: var(--text);
 }
@@ -905,11 +905,9 @@ code {
 
 .section-head h2 {
   margin: 0;
-  font-family: var(--display);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
 }
 
 .app-foot {
@@ -1706,7 +1704,6 @@ code {
 .link-cta:hover { filter: brightness(1.1); box-shadow: 0 2px 10px color-mix(in srgb, var(--brand) 45%, transparent); }
 .link-cta:active { transform: translateY(1px); }
 .link-cta:focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand) 55%, transparent); }
-.link-cta-icon { flex: 0 0 auto; }
 .link-cta-hint { margin: 0; font-size: 12px; line-height: 1.35; color: var(--muted); }
 .wallet-row .wallet-stx-unlinked { flex: 2 1 220px; gap: 6px; border-style: dashed; border-color: color-mix(in srgb, var(--brand) 55%, var(--border)); }
 
@@ -1783,12 +1780,12 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 .matchup-row { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .matchup-name { font-weight: 500; font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .matchup-score {
-  margin-left: auto; font-family: var(--display); font-weight: 600; font-size: 22px;
+  margin-left: auto; font-weight: 600; font-size: 19px;
   font-variant-numeric: tabular-nums; line-height: 1;
 }
 .matchup-compact { gap: 4px; }
 .matchup-compact .matchup-name { font-size: 13px; }
-.matchup-compact .matchup-score { font-size: 17px; }
+.matchup-compact .matchup-score { font-size: 15px; }
 
 .event-status {
   display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
@@ -1840,14 +1837,25 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 }
 .wallet-line dd { margin: 0; min-width: 0; }
 .wallet-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.wallet-dot-stx { background: #f5c518; }
+/* The STX line's marker is the STX mark itself: the X of the STX logo,
+   cropped from the same asset the footer uses. */
+.stx-mark {
+  display: block; flex: none; height: 14px; width: 13px;
+  object-fit: cover; object-position: 100% 50%;
+}
+.live-head h3 { display: inline-flex; align-items: center; gap: 6px; }
+.live-head-logo { display: block; height: 13px; width: 36px; }
+.link-cta .stx-mark { height: 16px; width: 15px; }
+/* The logo is yellow: on the light theme give it a hairline edge so it holds up on white. */
+:root[data-theme="light"] .stx-mark,
+:root[data-theme="light"] .live-head-logo { filter: drop-shadow(0 0 .6px rgba(14, 23, 38, .55)); }
 .wallet-amount {
-  font-family: var(--display); font-size: clamp(17px, 6.4cqi, 22px); font-weight: 600; letter-spacing: .01em;
+  font-size: clamp(16px, 5.6cqi, 19px); font-weight: 600; letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text);
 }
 .wallet-line-total { border-bottom: 0; padding-bottom: 2px; }
 .wallet-line-total dt { color: var(--text); }
-.wallet-line-total .wallet-amount { font-size: clamp(20px, 7.5cqi, 26px); }
+.wallet-line-total .wallet-amount { font-size: clamp(18px, 6.6cqi, 23px); }
 /* STX amount above a one-line change note. The note line is always there
    (empty when nothing moved), so the row never changes size. */
 .wallet-amount-wrap { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }

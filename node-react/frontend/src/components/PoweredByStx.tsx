@@ -19,3 +19,14 @@ export function PoweredByStx({ compact = false }: { compact?: boolean }) {
     </a>
   );
 }
+
+// The STX mark: the X of the same logo, cropped in CSS (see .stx-mark). Pass
+// alt="STX" where it names STX; the default is decorative.
+export function StxMark({ alt = "", className = "" }: { alt?: string; className?: string }) {
+  return <img src={stxLogo} alt={alt} className={`stx-mark ${className}`.trim()} aria-hidden={alt ? undefined : true} />;
+}
+
+// The full STX logo inline with text, e.g. "Live from [STX]".
+export function StxLogo({ className = "" }: { className?: string }) {
+  return <img src={stxLogo} alt="STX" className={className} />;
+}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveAccount, type FeedItem, type LiveKind } from "../liveAccount";
+import { StxLogo } from "./PoweredByStx";
 
 // Live member feed. The ISV backend keeps a live view of the member's STX
 // account from its socket (balances / fills / orders / positions) and relays it
@@ -103,7 +104,9 @@ export function LiveFeed() {
   return (
     <div className="card live-feed">
       <div className="live-head">
-        <h3>Live from STX</h3>
+        <h3>
+          Live from <StxLogo className="live-head-logo" />
+        </h3>
         {paused && rows.length > 0 ? (
           <span className="live-paused" role="status">
             Paused{waiting > 0 ? ` · ${waiting} new` : ""}

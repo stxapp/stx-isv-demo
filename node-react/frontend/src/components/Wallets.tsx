@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type PublicApp, type WalletState } from "../api";
 import { LinkStxButton } from "./LinkStx";
+import { StxMark } from "./PoweredByStx";
 import { useLiveAccount } from "../liveAccount";
 import { formatMoney } from "../publicMarketData";
 
@@ -103,7 +104,7 @@ export function Wallets({
 
         <div className={`wallet-line wallet-line-stx${change ? ` moved-${change.dir}` : ""}`}>
           <dt>
-            <span className="wallet-dot wallet-dot-stx" aria-hidden="true" />
+            <StxMark />
             STX balance
           </dt>
           {stxLinked ? (
