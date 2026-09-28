@@ -179,7 +179,7 @@ export function PriceChart({
                   d={ln.d}
                   fill="none"
                   stroke={ln.color}
-                  strokeWidth="2"
+                  strokeWidth="1.75"
                   strokeDasharray={geom.flat ? "5 4" : undefined}
                   strokeOpacity={geom.flat ? 0.6 : 1}
                   vectorEffect="non-scaling-stroke"

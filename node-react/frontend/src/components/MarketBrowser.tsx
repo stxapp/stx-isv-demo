@@ -575,11 +575,26 @@ function MarketCard({
         type="button"
         className="card-book-btn"
         onClick={onOpenBook}
-        title="Order book"
-        aria-label="Order book"
+        title="Order book, price and recent trades"
       >
-        ▤
+        <BookIcon />
+        Order book
       </button>
     </div>
+  );
+}
+
+// Price levels: the order-book glyph on the card button.
+function BookIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        d="M2 4h9M2 8h12M2 12h7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
