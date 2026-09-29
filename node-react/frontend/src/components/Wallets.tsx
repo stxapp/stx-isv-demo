@@ -144,8 +144,12 @@ export function Wallets({
         <p className="wallet-note">STX funds stay at STX. {app.name} never holds them.</p>
       )}
       {stxLinked && (
-        <button className="link wallet-raw-toggle" onClick={() => setShowRaw((v) => !v)}>
-          {showRaw ? "Hide" : "Show"} raw STX balance
+        <button type="button" className="link wallet-raw-toggle" onClick={() => setShowRaw((v) => !v)}>
+          {/* A </> code mark: the raw balance is the API response. */}
+          <svg className="wallet-raw-icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M5.5 4 1.5 8l4 4M10.5 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{showRaw ? "Hide" : "Show"} raw STX balance</span>
         </button>
       )}
       {stxLinked && showRaw && <pre className="json">{JSON.stringify(rawBalance, null, 2)}</pre>}

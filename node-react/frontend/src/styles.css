@@ -1886,7 +1886,13 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 .wallet-unlinked { font-size: 13px; color: var(--muted); }
 .wallet-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .wallets .link-cta-wrap { margin-top: 10px; }
-.wallet-raw-toggle { display: inline-block; margin-top: 6px; font-size: 12px; }
+/* Flush left with the note above: no button padding. The icon is not underlined. */
+.wallet-raw-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 6px; padding: 0; font-size: 12px; text-decoration: none;
+}
+.wallet-raw-toggle span { text-decoration: underline; }
+.wallet-raw-icon { flex: none; display: block; }
 
 /* The balance change, under the STX amount for 4 s, then fades. */
 .balance-chip {
