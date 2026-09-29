@@ -1691,7 +1691,11 @@ code {
   padding: 9px 14px;
   border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--brand);
+  /* A darker shade of the brand color, so the white label and the STX logo
+     for the active theme both pass WCAG AA (4.5:1). Dark theme: yellow ST
+     7.8:1, white text 9.4:1. Light theme (below): black ST 4.5:1, white text
+     4.6:1, at the default brand blue. */
+  background: color-mix(in srgb, var(--brand) 50%, #000);
   color: #fff;
   font: inherit;
   font-size: 14px;
@@ -1701,7 +1705,9 @@ code {
   box-shadow: 0 1px 0 rgba(0, 0, 0, .25);
   transition: filter .12s ease, transform .12s ease, box-shadow .12s ease;
 }
-.link-cta:hover { filter: brightness(1.1); box-shadow: 0 2px 10px color-mix(in srgb, var(--brand) 45%, transparent); }
+:root[data-theme="light"] .link-cta { background: color-mix(in srgb, var(--brand) 83%, #000); }
+/* Hover adds a glow but keeps the fill, so the contrast above holds. */
+.link-cta:hover { box-shadow: 0 2px 10px color-mix(in srgb, var(--brand) 45%, transparent); }
 .link-cta:active { transform: translateY(1px); }
 .link-cta:focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand) 55%, transparent); }
 .link-cta-hint { margin: 0; font-size: 12px; line-height: 1.35; color: var(--muted); }

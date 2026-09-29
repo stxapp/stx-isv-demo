@@ -42,11 +42,3 @@ export function PoweredByStx({ compact = false }: { compact?: boolean }) {
 export function StxLogo({ alt = "STX", className = "" }: { alt?: string; className?: string }) {
   return <Themed light={stxLogoLight} dark={stxLogoDark} alt={alt} className={className} />;
 }
-
-// The STX logo on the "Link your STX account" button. The button is the same
-// brand blue in both themes, so it always takes the light-background logo (black
-// ST), which reads on blue; the dark-background one (yellow ST) does not. It is
-// decorative: the button label already says STX.
-export function StxLogoOnBrand({ className = "" }: { className?: string }) {
-  return <img src={stxLogoLight} alt="" aria-hidden="true" className={className} />;
-}
