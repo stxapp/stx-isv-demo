@@ -67,6 +67,28 @@ export function Matchup({ market, brief, compact = false }: { market: MarketSumm
   );
 }
 
+// One line: "CHC @ BOS" as badges, with the live score after each when there is
+// one. The badges are decorative, so the full names are in hidden text for
+// screen readers and in the tooltip.
+export function MatchupInline({ market, brief }: { market: MarketSummary; brief?: MarketBrief }) {
+  const pair = teams(market);
+  if (pair.length < 2) return null;
+  const scores = scoresFrom(brief?.event_brief, pair);
+  const names = pair.map((t, i) => `${t.name ?? t.abbreviation ?? "?"}${scores ? ` ${scores[i]}` : ""}`).join(" at ");
+  return (
+    <span className="matchup-inline" title={names}>
+      {pair.map((t, i) => (
+        <span className="matchup-inline-team" key={`${t.role}-${t.abbreviation ?? i}`}>
+          {i > 0 && <span className="matchup-at" aria-hidden="true">@</span>}
+          <TeamBadge team={t} size="sm" />
+          {scores && <span className="matchup-inline-score" aria-hidden="true">{scores[i]}</span>}
+        </span>
+      ))}
+      <span className="visually-hidden">{names}</span>
+    </span>
+  );
+}
+
 // Per-team scores from "AWAY 3 - 4 HOME", in [away, home] order, or null.
 function scoresFrom(brief: string | null | undefined, pair: Participant[]): [string, string] | null {
   const score = splitBrief(brief)?.score;

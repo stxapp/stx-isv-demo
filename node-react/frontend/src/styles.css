@@ -887,13 +887,22 @@ code {
   min-width: 0;
 }
 
+/* The right column stays in view while the markets scroll. It is capped at the
+   viewport height and scrolls on its own, so a long betslip never pushes the
+   Place button out of reach (a sticky box taller than the viewport would only
+   show its bottom at the very end of the page). */
 .trade-col {
   position: sticky;
   top: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
+.trade-col > * { flex: none; }
 
 .section-head {
   display: flex;
@@ -924,7 +933,7 @@ code {
 
 @media (max-width: 860px) {
   .layout { grid-template-columns: 1fr; }
-  .trade-col { position: static; }
+  .trade-col { position: static; max-height: none; overflow: visible; }
 }
 
 /* ================= Trade panel ================= */
@@ -1391,14 +1400,17 @@ code {
   font-weight: 500;
 }
 .betslip-clear { margin-left: auto; font-size: 12px; }
-.betslip-legs { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.betslip-legs { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* A leg is three rows: the event, the selection with its cost and payout, and
+   the order controls. */
 .betslip-leg {
+  display: flex; flex-direction: column; gap: 5px;
   border: 1px solid var(--border); border-left: 3px solid var(--border);
-  border-radius: 9px; padding: 9px 11px; background: color-mix(in srgb, var(--text) 2%, transparent);
+  border-radius: 9px; padding: 6px 8px 7px 9px; background: color-mix(in srgb, var(--text) 2%, transparent);
 }
 .betslip-leg.leg-buy { border-left-color: var(--pos); }
 .betslip-leg.leg-sell { border-left-color: var(--neg); }
-.leg-top { display: flex; align-items: center; gap: 7px; }
+.leg-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .leg-side {
   font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em;
   padding: 2px 6px; border-radius: 5px; flex: 0 0 auto;
@@ -1414,14 +1426,15 @@ code {
 
 /* Per-leg live economics + slip totals. */
 .leg-math {
-  display: flex; align-items: center; gap: 10px; margin-top: 7px;
-  font-size: 12px; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: auto;
+  font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .leg-math-item { display: inline-flex; align-items: baseline; gap: 5px; }
 .leg-math-k { color: var(--muted); font-size: 11px; }
 .leg-math-item b { font-weight: 600; }
 .leg-math-arrow { color: var(--muted); }
-.leg-math-hint { color: var(--muted); font-style: italic; }
+.leg-math-hint { color: var(--muted); font-style: italic; font-size: 11px; }
+.leg-math b { font-weight: 600; }
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
 .betslip-summary {
@@ -1440,16 +1453,18 @@ code {
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
-  padding: 0 4px;
+  padding: 0 2px 0 4px;
+  flex: none;
 }
 .leg-remove:hover { color: var(--danger); }
-.leg-controls { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
-.seg-sm { flex: 0 0 auto; }
-.seg-sm .seg { padding: 4px 10px; font-size: 12px; }
+/* One control row, 30px tall. */
+.leg-controls { display: flex; gap: 5px; align-items: stretch; height: 30px; }
+.seg-sm { flex: 0 0 auto; padding: 2px; gap: 2px; border-radius: 7px; }
+.seg-sm .seg { padding: 0 10px; font-size: 12px; border-radius: 5px; }
 .leg-input {
   flex: 1;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 0 8px;
   border-radius: 7px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -1462,7 +1477,7 @@ code {
 /* betslip: visible place button, order-type select, powered-by */
 .betslip-place { width: 100%; margin-top: 8px; background: var(--brand); color: #fff; }
 .leg-select {
-  padding: 5px 8px;
+  padding: 0 6px;
   border-radius: 7px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -1817,10 +1832,13 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 .event-detail-head .team-badge-md { width: 46px; height: 34px; font-size: 16px; }
 
 /* ================= Betslip: event context per leg ================= */
-.leg-event { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.leg-event { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 22px; }
+.leg-event .event-status { margin-left: auto; }
+.matchup-inline { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.matchup-inline-team { display: inline-flex; align-items: center; gap: 5px; }
+.matchup-at { font-size: 11px; color: var(--muted); }
+.matchup-inline-score { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .leg-competition { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.betslip-leg .matchup { margin-bottom: 8px; }
-.leg-question { margin: 6px 0 8px; font-size: 12px; color: var(--muted); line-height: 1.35; }
 .betslip-linkbox { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .betslip-linkbox-lead { margin: 0; font-size: 13px; color: var(--muted); }
 .betslip-done { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

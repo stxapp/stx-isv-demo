@@ -1,8 +1,8 @@
 import { track } from "../analytics";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
-import { formatMoney, type MarketBrief, type MarketSummary } from "../publicMarketData";
-import { EventStatus, Matchup, SportIcon } from "./EventBits";
+import { formatMoney, teams, type MarketBrief, type MarketSummary } from "../publicMarketData";
+import { EventStatus, MatchupInline, SportIcon } from "./EventBits";
 import { LinkStxButton } from "./LinkStx";
 import { PoweredByStx } from "./PoweredByStx";
 
@@ -192,40 +192,63 @@ export function Betslip({
           const econ = legEconomics(l);
           return (
           <li key={l.marketId} className={`betslip-leg leg-${l.action}`}>
-            {l.market && (
-              <div className="leg-event">
-                <SportIcon sport={l.market.sport} size={14} />
-                <span className="leg-competition">{l.market.competition ?? l.market.sport}</span>
-                <EventStatus market={l.market} brief={l.market.eventId ? briefs[l.market.eventId] : undefined} />
-              </div>
-            )}
-            {l.market && (
-              <Matchup market={l.market} brief={l.market.eventId ? briefs[l.market.eventId] : undefined} compact />
-            )}
+            {/* Row 1: sport, "AWAY @ HOME", start time or live clock, remove. */}
+            <div className="leg-event">
+              {l.market && <SportIcon sport={l.market.sport} size={12} />}
+              {/* The league shows only when there is no matchup to show. */}
+              {l.market && (
+                <span className={`leg-competition${teams(l.market).length >= 2 ? " visually-hidden" : ""}`}>
+                  {l.market.competition ?? l.market.sport}
+                </span>
+              )}
+              {l.market && <MatchupInline market={l.market} brief={l.market.eventId ? briefs[l.market.eventId] : undefined} />}
+              {l.market && <EventStatus market={l.market} brief={l.market.eventId ? briefs[l.market.eventId] : undefined} />}
+              <button
+                type="button"
+                className="leg-remove"
+                onClick={() => remove(i)}
+                aria-label={`Remove ${l.label} from betslip`}
+              >
+                ×
+              </button>
+            </div>
+            {/* Row 2: side, selection (the market question as its tooltip), contract
+                size, and the order's cost and payout (or what it still needs). */}
             <div className="leg-top">
               <span className={`leg-side leg-side-${l.action}`}>{l.action}</span>
-              <span className="leg-label" title={l.label}>{l.label}</span>
+              <span className="leg-label" title={l.market?.question ? `${l.label}: ${l.market.question}` : l.label}>
+                {l.label}
+                {l.market?.question && <span className="visually-hidden">. {l.market.question}</span>}
+              </span>
               <span
                 className="leg-scale"
                 title={`$${(maxCents(l) / 100).toFixed(2)} market: contracts settle at ${maxCents(l)}¢`}
               >
                 ${maxCents(l) / 100}
               </span>
-              <button
-                type="button"
-                className="leg-remove"
-                onClick={() => remove(i)}
-                aria-label="Remove from betslip"
-              >
-                ×
-              </button>
+              {econ ? (
+                <span className="leg-math">
+                  <span className="visually-hidden">{l.action === "buy" ? "Cost" : "You get"} </span>
+                  <b title={l.action === "buy" ? "Cost" : "You get"}>{fmt(econ.cost)}</b>
+                  <span className="leg-math-arrow" aria-hidden="true">→</span>
+                  <span className="visually-hidden">, {l.action === "buy" ? "to win" : "you risk"} </span>
+                  <b className={l.action === "buy" ? "pos" : "neg"} title={l.action === "buy" ? "To win" : "You risk"}>
+                    {fmt(econ.win)}
+                  </b>
+                </span>
+              ) : (
+                <span className="leg-math leg-math-hint">
+                  {l.orderType === "market" ? "At market" : "Price & qty"}
+                </span>
+              )}
             </div>
-            {l.market?.question && <p className="leg-question">{l.market.question}</p>}
+            {/* Row 3: the order controls, one compact row. */}
             <div className="leg-controls">
               <div className="segmented seg-sm" role="group" aria-label="Side">
                 <button
                   type="button"
                   className={`seg seg-buy${l.action === "buy" ? " active" : ""}`}
+                  aria-pressed={l.action === "buy"}
                   onClick={() => patch(i, { action: "buy" })}
                 >
                   Buy
@@ -233,6 +256,7 @@ export function Betslip({
                 <button
                   type="button"
                   className={`seg seg-sell${l.action === "sell" ? " active" : ""}`}
+                  aria-pressed={l.action === "sell"}
                   onClick={() => patch(i, { action: "sell" })}
                 >
                   Sell
@@ -243,6 +267,7 @@ export function Betslip({
                 value={l.orderType}
                 onChange={(e) => patch(i, { orderType: e.target.value as "limit" | "market" })}
                 aria-label="Order type"
+                title={l.orderType === "market" ? "Market: fills at the market price" : "Limit: fills at your price or better"}
               >
                 <option value="limit">Limit</option>
                 <option value="market">Market</option>
@@ -252,6 +277,7 @@ export function Betslip({
                   className="leg-input"
                   inputMode="numeric"
                   placeholder={`1–${maxCents(l)}¢`}
+                  aria-label={`Price in cents, 1 to ${maxCents(l)}`}
                   title={`Price in cents, 1 to ${maxCents(l)} ($${(maxCents(l) / 100).toFixed(2)} market)`}
                   value={l.price}
                   onChange={(e) => patch(i, { price: e.target.value.replace(/\D/g, "") })}
@@ -261,27 +287,11 @@ export function Betslip({
                 className="leg-input"
                 inputMode="numeric"
                 placeholder="qty"
+                aria-label="Quantity (contracts)"
                 value={l.quantity}
                 onChange={(e) => patch(i, { quantity: e.target.value.replace(/\D/g, "") })}
               />
             </div>
-            {econ ? (
-              <div className="leg-math">
-                <span className="leg-math-item">
-                  <span className="leg-math-k">{l.action === "buy" ? "Cost" : "You get"}</span>
-                  <b>{fmt(econ.cost)}</b>
-                </span>
-                <span className="leg-math-arrow" aria-hidden="true">→</span>
-                <span className="leg-math-item">
-                  <span className="leg-math-k">{l.action === "buy" ? "To win" : "You risk"}</span>
-                  <b className={l.action === "buy" ? "pos" : "neg"}>{fmt(econ.win)}</b>
-                </span>
-              </div>
-            ) : (
-              <div className="leg-math leg-math-hint">
-                {l.orderType === "market" ? "Fills at the market price" : "Enter price & quantity"}
-              </div>
-            )}
           </li>
           );
         })}
