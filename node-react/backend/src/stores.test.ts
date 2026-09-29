@@ -30,6 +30,14 @@ beforeEach(() => {
 });
 
 describe("userStore: the ISV user + their own wallet", () => {
+  test("addFunds tops up only that user's wallet", () => {
+    const a = userStore.ensure({ sessionId: "s-a", appId: "sideline", name: "A", startingWalletCents: 25_000 });
+    const b = userStore.ensure({ sessionId: "s-b", appId: "sideline", name: "B", startingWalletCents: 25_000 });
+    expect(userStore.addFunds(a.id, 5_000)?.walletCents).toBe(30_000);
+    expect(userStore.get(b.id)?.walletCents).toBe(25_000);
+    expect(userStore.addFunds("no-such-user", 100)).toBeNull();
+  });
+
   test("ensure creates a user with the seeded wallet, then is idempotent", () => {
     const a = userStore.ensure({
       sessionId: "sess-1",

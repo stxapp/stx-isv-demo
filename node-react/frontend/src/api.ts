@@ -152,8 +152,7 @@ export interface ActivityDetail {
 // first-party there: cookies and CSRF work with no cross-site weakening, and
 // X-Frame-Options (which would block an iframe) does not apply to a popup.
 // /callback relays the result back via postMessage and closes itself
-// (see the message listener in App.tsx). If the browser blocks the popup, fall
-// back to a full-page redirect so linking still works.
+// (see the message listener in App.tsx).
 // Open an STX flow (link, deposit, …) in a centered popup so the ISV brand page
 // stays put. The popup is opened directly at the URL from the click gesture, so
 // its first document is the STX page itself. (Opening about:blank and navigating
@@ -161,8 +160,16 @@ export interface ActivityDetail {
 // strict storage partitioning, Brave among them, can then split the STX session
 // cookie between the login page and the post-login redirect, which strands the
 // member on the STX home page instead of returning to consent.) If the browser
-// blocks the popup, fall back to a full-page redirect so linking still works.
-export function openStxPopup(url: string, name: string, size?: { w: number; h: number }): void {
+// blocks the popup, the page stays put and PopupBlocked offers to open it again
+// (a second click is a fresh gesture, which popup blockers let through).
+export interface StxPopupRequest {
+  url: string;
+  name: string;
+  size?: { w: number; h: number };
+}
+export const POPUP_BLOCKED_EVENT = "stx-popup-blocked";
+
+export function openStxPopup(url: string, name: string, size?: { w: number; h: number }): boolean {
   const w = size?.w ?? 480;
   const h = size?.h ?? 720;
   const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
@@ -173,10 +180,12 @@ export function openStxPopup(url: string, name: string, size?: { w: number; h: n
     `width=${w},height=${h},left=${left},top=${top},resizable,scrollbars`,
   );
   if (!popup) {
-    window.location.href = url;
-    return;
+    const detail: StxPopupRequest = { url, name, size };
+    window.dispatchEvent(new CustomEvent(POPUP_BLOCKED_EVENT, { detail }));
+    return false;
   }
   popup.focus();
+  return true;
 }
 
 // Login/consent is a tall, narrow form; the deposit page (card form + methods)
@@ -204,6 +213,9 @@ export const api = {
     }),
   signout: () => req<{ ok: boolean }>("/api/signout", { method: "POST" }),
   unlink: () => req<{ ok: boolean }>("/api/unlink", { method: "POST" }),
+  // Demo top-up of the app's own wallet (no payment; STX funds are added at STX).
+  addFunds: (cents: number) =>
+    req<{ user: DemoUser }>("/api/wallet/deposit", { method: "POST", body: JSON.stringify({ cents }) }),
   // `live`: the browser holds the live feed, so the backend never calls STX for
   // the balance here (the STX cash comes from the stream).
   wallet: (live = false) => req<WalletState>(live ? "/api/wallet?stx=live" : "/api/wallet"),

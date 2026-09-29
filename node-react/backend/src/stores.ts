@@ -34,6 +34,8 @@ export interface UserStore {
   find(sessionId: string, appId: string): User | null;
   // Remove the user for (session, app). The caller removes any link first.
   remove(sessionId: string, appId: string): void;
+  // Add demo funds to the user's own wallet; returns the updated user.
+  addFunds(userId: string, cents: number): User | null;
 }
 
 // ---- Account-link store (STX grant linked to an ISV user) ------------------
@@ -158,6 +160,14 @@ export const userStore: UserStore = {
       $sid: sessionId,
       $app: appId,
     });
+  },
+
+  addFunds(userId, cents) {
+    db.query(`UPDATE users SET wallet_cents = wallet_cents + $cents WHERE id = $id`).run({
+      $id: userId,
+      $cents: cents,
+    });
+    return this.get(userId);
   },
 };
 

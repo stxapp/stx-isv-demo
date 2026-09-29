@@ -140,6 +140,8 @@ export type AnalyticsEvent =
   | "order_cancel"
   | "api_calls_view"
   | "deposit_click"
+  | "wallet_topup"
+  | "popup_blocked"
   | "source_click";
 
 /** A named event with non-personal parameters (counts, labels). */

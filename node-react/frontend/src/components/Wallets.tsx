@@ -4,13 +4,15 @@ import { LinkStxButton } from "./LinkStx";
 import { StxLogo } from "./PoweredByStx";
 import { useLiveAccount } from "../liveAccount";
 import { formatMoney } from "../publicMarketData";
+import { openStxDeposit } from "../stxDeposit";
 
 // The dual wallet: the ISV app's OWN wallet (held here, the demo's mock balance)
 // and the STX cash balance (real, pushed live over the member's STX socket), plus
 // a combined total when the STX cash amount can be parsed. The STX side comes
 // from the live feed, so trading makes no balance call; /api/wallet only supplies
 // the app wallet (and the STX balance over REST if the live feed could not open).
-// Deposit lives in the header; funds are added at STX, never touched by the ISV.
+// The header's Deposit tops up the app wallet; the STX line has its own "Add
+// funds", which opens STX's deposit page. The ISV never touches STX funds.
 //
 // Every amount is shown in full, "$100,000.00": a wallet never abbreviates.
 // When the STX balance moves, a line under it says by how much ("▼ $24.75" in
@@ -105,8 +107,18 @@ export function Wallets({
         <div className={`wallet-line wallet-line-stx${change ? ` moved-${change.dir}` : ""}`}>
           <dt>
             {/* The logo is the word STX (alt "STX"), so the row reads "STX balance". */}
-            <StxLogo className="wallet-stx-logo" />
-            balance
+            <span className="wallet-stx-label">
+              <StxLogo className="wallet-stx-logo" />
+              balance
+            </span>
+            {stxLinked && (
+              <button type="button" className="wallet-stx-deposit" onClick={openStxDeposit} aria-label="Add funds at STX (opens STX)">
+                <span aria-hidden="true">+</span> Add funds
+                <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="M6 3h7v7M13 3 5 11M11 13H3V5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
           </dt>
           {stxLinked ? (
             <dd className="wallet-amount-wrap">

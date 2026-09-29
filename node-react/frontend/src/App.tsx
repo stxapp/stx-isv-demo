@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, BACKEND, openStxPopup, type MeState, type PublicApp } from "./api";
-import { marketLabel, setStxUrl, stxUrl, type MarketBrief, type MarketSummary } from "./publicMarketData";
+import { api, BACKEND, type MeState, type PublicApp } from "./api";
+import { marketLabel, setStxUrl, type MarketBrief, type MarketSummary } from "./publicMarketData";
 import { IsvLogo } from "./components/IsvLogo";
 import { SignIn } from "./components/SignIn";
 import { Wallets } from "./components/Wallets";
@@ -15,6 +15,8 @@ import { SourceFootLink, SourceIconLink } from "./components/SourceLink";
 import { LiveAccountProvider, useLiveAccountStream } from "./liveAccount";
 import { initAnalytics, track, trackPage } from "./analytics";
 import { ConsentBanner } from "./components/ConsentBanner";
+import { PopupBlocked } from "./components/PopupBlocked";
+import { WalletDeposit } from "./components/WalletDeposit";
 
 const THEME_KEY = "stx_isv_theme";
 
@@ -130,6 +132,7 @@ export function App() {
   // measurement id; the footer link reopens the consent choice.
   const [analyticsOn, setAnalyticsOn] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
   // A virtual page view per view; the API calls page is also an event.
   useEffect(() => {
     trackPage(VIEW_PATH[view], view === "home" ? "Markets" : view === "api" ? "API calls" : NAV_LABEL[view]);
@@ -307,15 +310,14 @@ export function App() {
           </nav>
         )}
         <div className="topbar-right">
-          {me?.user && linked && (
+          {/* Deposit tops up the app's own wallet; STX funds are added from the
+              STX line of the wallet card. */}
+          {me?.user && app && (
             <button
               type="button"
               className="header-deposit"
-              aria-label="Deposit at STX"
-              onClick={() => {
-                track("deposit_click");
-                openStxPopup(`${stxUrl()}/player/deposit_funds`, "stx_deposit", { w: 540, h: 780 });
-              }}
+              aria-label={`Add funds to your ${app.name} wallet`}
+              onClick={() => setDepositOpen(true)}
             >
               <span aria-hidden="true">+</span>
               <span className="deposit-text">Deposit</span>
@@ -429,6 +431,10 @@ export function App() {
         </div>
       </footer>
       <ConsentBanner reopen={consentOpen} onClose={() => setConsentOpen(false)} />
+      {me?.user && app && (
+        <WalletDeposit app={app} open={depositOpen} onClose={() => setDepositOpen(false)} onDeposited={afterAuthChange} />
+      )}
+      <PopupBlocked />
     </div>
     </LiveAccountProvider>
   );

@@ -192,6 +192,8 @@ running Sideline is also a live map of this section.
 - **Dual wallet.** `Sideline wallet` (held here) + `STX balance` (live from the
   member's STX socket, scope `balance.read`) = `Combined`. A total is shown only
   when the STX cash amount parses.
+- **Two deposits, kept apart.** The header's **Deposit** adds demo funds to the Sideline wallet (no payment). **Add funds** on the STX balance opens STX's own deposit page in a popup: members fund their STX account at STX.
+- **Popups, not redirects.** STX pages open in a popup so the member stays on Sideline. If the browser blocks it, Sideline asks once more (a fresh click gets past popup blockers) and only then offers to continue in the same tab.
 - **Scoped, money-safe.** Sideline asks only for the scopes it needs
   (`profile.read balance.read portfolio.read orders.read orders.write`). **No
   scope moves money**: deposits and withdrawals are never delegable.
@@ -276,7 +278,8 @@ environment, and a fork sends nothing unless it sets its own id.
   Settlements, API calls); the landing view keeps its URL, so `utm_*` campaign
   tags are counted. Events: `sign_in`, `link_start`, `link_success`,
   `link_error`, `order_place` (number of orders only), `order_cancel`,
-  `api_calls_view`, `deposit_click`, `source_click`.
+  `api_calls_view`, `deposit_click` (STX deposit), `wallet_topup` (Sideline
+  wallet), `popup_blocked`, `source_click`.
 - **What is never sent.** Names, emails, STX account or user ids, order ids,
   prices or balances.
 

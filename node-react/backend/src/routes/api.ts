@@ -169,6 +169,28 @@ apiRoutes.get("/me", async (c) => {
   });
 });
 
+// Demo top-ups for the app's own wallet: whole dollars, one at a time up to
+// $1,000, and the wallet never above $100,000. No payment is taken.
+const MAX_TOPUP_CENTS = 100_000;
+const MAX_WALLET_CENTS = 10_000_000;
+
+// POST /api/wallet/deposit?app=<id>: add demo funds to the app's OWN wallet.
+// Body: { cents }. This is the ISV's money only; STX funds are added at STX.
+apiRoutes.post("/wallet/deposit", async (c) => {
+  const app = requireApp(c);
+  const user = requireUser(c, app);
+  const body = (await c.req.json().catch(() => ({}))) as { cents?: unknown };
+  const cents = body.cents;
+  if (typeof cents !== "number" || !Number.isInteger(cents) || cents <= 0 || cents % 100 !== 0 || cents > MAX_TOPUP_CENTS) {
+    return c.json({ error: "invalid_amount", message: "Choose a whole-dollar amount from $1 to $1,000." }, 400);
+  }
+  if (user.walletCents + cents > MAX_WALLET_CENTS) {
+    return c.json({ error: "wallet_limit", message: "The demo wallet tops out at $100,000." }, 400);
+  }
+  const updated = userStore.addFunds(user.id, cents);
+  return c.json({ user: updated ? publicUser(updated) : null });
+});
+
 // GET /api/wallet?app=<id>: the dual-wallet view: the ISV app's OWN wallet
 // (authoritative, held here) alongside the STX cash balance (fetched live from
 // STX via the link, scope `balance.read`). Combined total is shown only when the STX
