@@ -1837,12 +1837,13 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 }
 .wallet-line dd { margin: 0; min-width: 0; }
 .wallet-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-/* The STX line's marker is the STX mark itself: the X of the STX logo. */
-.stx-mark { display: block; flex: none; height: 14px; width: 13px; }
+/* The STX line's label is the STX logo followed by "balance". Explicit box
+   (the logo's 1800x650 frame) so nothing shifts while it loads. */
+.wallet-stx-logo { display: block; flex: none; height: 14px; width: 39px; }
 .live-head h3 { display: inline-flex; align-items: center; gap: 6px; }
 .live-head-logo { display: block; height: 13px; width: 36px; }
-.link-cta .stx-mark { height: 16px; width: 15px; }
-/* STX logo and mark: both theme versions are in the DOM; show the one that
+.link-cta-logo { display: block; flex: none; height: 15px; width: 42px; }
+/* STX logo: both theme versions are in the DOM; show the one that
    matches the resolved theme (dark is the default until App.tsx sets data-theme). */
 :root:not([data-theme="light"]) .theme-light-only,
 :root[data-theme="light"] .theme-dark-only { display: none !important; }

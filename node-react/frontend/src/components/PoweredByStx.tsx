@@ -1,8 +1,7 @@
 // "Powered by STX" attribution and the other places the STX logo appears. The
 // official STX logos (light and dark theme versions, src/assets/stx-logo-*.svg)
-// and the STX mark (the X of the same logos, stx-mark-*.svg) are imported (not
-// from /public) so Vite emits them under /assets, which the public preview WAF
-// allows.
+// are imported (not from /public) so Vite emits them under /assets, which the
+// public preview WAF allows.
 //
 // Each logo renders both theme versions and CSS shows the one that matches
 // data-theme on <html> (see .theme-light-only / .theme-dark-only), so it follows
@@ -10,8 +9,6 @@
 // is display:none, so assistive tech only ever sees one accessible name.
 import stxLogoLight from "../assets/stx-logo-light.svg";
 import stxLogoDark from "../assets/stx-logo-dark.svg";
-import stxMarkLight from "../assets/stx-mark-light.svg";
-import stxMarkDark from "../assets/stx-mark-dark.svg";
 import { stxUrl } from "../publicMarketData";
 
 function Themed({ light, dark, alt, className }: { light: string; dark: string; alt: string; className: string }) {
@@ -39,13 +36,17 @@ export function PoweredByStx({ compact = false }: { compact?: boolean }) {
   );
 }
 
-// The STX mark: the X of the STX logo. Pass alt="STX" where it names STX; the
-// default is decorative.
-export function StxMark({ alt = "", className = "" }: { alt?: string; className?: string }) {
-  return <Themed light={stxMarkLight} dark={stxMarkDark} alt={alt} className={`stx-mark ${className}`.trim()} />;
+// The full STX logo inline with text, e.g. "Live from [STX]" or "[STX] balance".
+// alt="STX" by default, so the logo reads as the word it replaces; pass alt=""
+// where the text next to it already says STX.
+export function StxLogo({ alt = "STX", className = "" }: { alt?: string; className?: string }) {
+  return <Themed light={stxLogoLight} dark={stxLogoDark} alt={alt} className={className} />;
 }
 
-// The full STX logo inline with text, e.g. "Live from [STX]".
-export function StxLogo({ className = "" }: { className?: string }) {
-  return <Themed light={stxLogoLight} dark={stxLogoDark} alt="STX" className={className} />;
+// The STX logo on the "Link your STX account" button. The button is the same
+// brand blue in both themes, so it always takes the light-background logo (black
+// ST), which reads on blue; the dark-background one (yellow ST) does not. It is
+// decorative: the button label already says STX.
+export function StxLogoOnBrand({ className = "" }: { className?: string }) {
+  return <img src={stxLogoLight} alt="" aria-hidden="true" className={className} />;
 }

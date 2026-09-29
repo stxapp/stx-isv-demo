@@ -1,9 +1,9 @@
 import { startLink } from "../api";
-import { StxMark } from "./PoweredByStx";
+import { StxLogoOnBrand } from "./PoweredByStx";
 
 // The one "link your STX account" call to action, used wherever a member can
 // link (the wallet's STX tile, the betslip). A real button: keyboard focusable,
-// with hover and focus states, the STX mark, and an optional one-line hint.
+// with hover and focus states, the STX logo, and an optional one-line hint.
 export function LinkStxButton({
   appName,
   hint = true,
@@ -19,7 +19,7 @@ export function LinkStxButton({
   return (
     <div className={`link-cta-wrap${block ? " block" : ""} ${className}`.trim()}>
       <button type="button" className="link-cta" onClick={startLink}>
-        <StxMark />
+        <StxLogoOnBrand className="link-cta-logo" />
         <span>Link your STX account</span>
       </button>
       {hint && (
