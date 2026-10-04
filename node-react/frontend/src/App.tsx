@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, BACKEND, type MeState, type PublicApp } from "./api";
-import { marketLabel, setStxUrl, type MarketBrief, type MarketSummary } from "./publicMarketData";
+import { marketLabel, setStxUrl, stxHost, type MarketBrief, type MarketSummary } from "./publicMarketData";
 import { IsvLogo } from "./components/IsvLogo";
 import { SignIn } from "./components/SignIn";
 import { Wallets } from "./components/Wallets";
@@ -163,8 +163,9 @@ export function App() {
     (async () => {
       try {
         const res = await api.app();
-        setProfile(res.app);
+        // Before setProfile: the re-render it triggers reads stxUrl()/stxHost().
         setStxUrl(res.stxPublicUrl);
+        setProfile(res.app);
         // Optional analytics (see analytics.ts): on only when the backend
         // sends a measurement id.
         initAnalytics(res);
@@ -412,7 +413,7 @@ export function App() {
           <p className="fiction-note" id="fiction-note">
             Sideline is a demo app built on the STX API. Not a real product.
           </p>
-          <p className="muted">Markets, scores, orders and balances are real STX preview data.</p>
+          <p className="muted">Markets, scores, orders and balances are real data from the STX environment at {stxHost()}.</p>
           <AnalyticsOptOut />
         </div>
         <div className="foot-links">

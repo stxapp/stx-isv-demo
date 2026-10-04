@@ -34,6 +34,16 @@ export function stxUrl(): string {
   return stxPublicUrl;
 }
 
+// The exchange's host name for display ("stx-sandbox.example.com"), so the app
+// can say which STX environment its data comes from.
+export function stxHost(url: string = stxPublicUrl): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
 // The exchange-served icon for a sport ("Baseball" -> .../baseball.svg). The
 // exchange answers an unknown sport with its generic icon, so any name is safe.
 // These are the only sports images the exchange serves: it has no team or
