@@ -14,7 +14,7 @@ import { PoweredByStx } from "./components/PoweredByStx";
 import { SourceFootLink, SourceIconLink } from "./components/SourceLink";
 import { LiveAccountProvider, useLiveAccountStream } from "./liveAccount";
 import { initAnalytics, track, trackPage } from "./analytics";
-import { ConsentBanner } from "./components/ConsentBanner";
+import { AnalyticsOptOut } from "./components/AnalyticsOptOut";
 import { PopupBlocked } from "./components/PopupBlocked";
 import { WalletDeposit } from "./components/WalletDeposit";
 
@@ -128,10 +128,6 @@ export function App() {
     }
   }
 
-  // Optional analytics (see analytics.ts): on only when the backend sends a
-  // measurement id; the footer link reopens the consent choice.
-  const [analyticsOn, setAnalyticsOn] = useState(false);
-  const [consentOpen, setConsentOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   // A virtual page view per view; the API calls page is also an event.
   useEffect(() => {
@@ -169,8 +165,9 @@ export function App() {
         const res = await api.app();
         setProfile(res.app);
         setStxUrl(res.stxPublicUrl);
-        initAnalytics(res.gaMeasurementId);
-        setAnalyticsOn(Boolean(res.gaMeasurementId));
+        // Optional analytics (see analytics.ts): on only when the backend
+        // sends a measurement id.
+        initAnalytics(res);
       } catch {
         // app() failing means the backend is unreachable; leave the banner.
       }
@@ -416,21 +413,13 @@ export function App() {
             Sideline is a demo app built on the STX API. Not a real product.
           </p>
           <p className="muted">Markets, scores, orders and balances are real STX preview data.</p>
-          {analyticsOn && (
-            <p className="muted analytics-note">
-              Anonymous usage statistics with your consent.{" "}
-              <button type="button" className="link" onClick={() => setConsentOpen(true)}>
-                Usage statistics
-              </button>
-            </p>
-          )}
+          <AnalyticsOptOut />
         </div>
         <div className="foot-links">
           <SourceFootLink />
           <PoweredByStx />
         </div>
       </footer>
-      <ConsentBanner reopen={consentOpen} onClose={() => setConsentOpen(false)} />
       {me?.user && app && (
         <WalletDeposit app={app} open={depositOpen} onClose={() => setDepositOpen(false)} onDeposited={afterAuthChange} />
       )}
