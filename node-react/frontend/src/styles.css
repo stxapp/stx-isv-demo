@@ -2058,31 +2058,8 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 }
 
 
-/* Usage-statistics consent: a small card at the bottom, above everything. */
-.consent {
-  position: fixed; z-index: 80; left: 16px; right: 16px; bottom: 16px; margin: 0 auto; max-width: 560px;
-  display: flex; align-items: center; gap: 14px; padding: 12px 14px;
-  background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: slip-in .22s ease-out;
-}
-:root[data-theme="light"] .consent { box-shadow: 0 10px 30px rgba(14, 23, 38, .16); }
-.consent-text { margin: 0; flex: 1; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
-.consent-current { color: var(--text); }
-.consent-actions { display: flex; gap: 8px; flex: none; }
-.consent-btn {
-  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: transparent;
-  color: var(--text); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
-}
-.consent-btn:hover { border-color: var(--muted); }
-.consent-accept { background: var(--brand); border-color: var(--brand); color: #fff; }
-.consent-accept:hover { filter: brightness(1.08); border-color: var(--brand); }
-.consent-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* Usage-statistics opt-out switch in the footer. */
 .analytics-note .link { font-size: inherit; padding: 0; }
-@media (max-width: 520px) {
-  .consent { flex-direction: column; align-items: stretch; gap: 10px; }
-  .consent-actions > * { flex: 1; }
-}
-@media (prefers-reduced-motion: reduce) { .consent { animation: none; } }
 
 /* ---- STX line: "Add funds" under the label -------------------------------- */
 .wallet-line-stx dt { flex-direction: column; align-items: flex-start; gap: 3px; }

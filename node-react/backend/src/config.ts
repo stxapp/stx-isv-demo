@@ -10,7 +10,7 @@
 // client. Its identity (client_id/secret/name/brand/scopes) is the app profile
 // below, read from CLIENT_ID/CLIENT_SECRET/APP_*.
 
-import { gaMeasurementIdFrom } from "./analytics";
+import { gaDomainsFrom, gaMeasurementIdFrom, gaRegionsFrom } from "./analytics";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -106,6 +106,14 @@ export const config = {
   // Google Analytics 4 measurement id ("G-..."), or null: no analytics code
   // is loaded at all. Sent to the browser at runtime (GET /api/app).
   gaMeasurementId: gaMeasurementIdFrom(process.env.GA_MEASUREMENT_ID),
+  // Optional GA settings, all empty by default. Referrers from these domains
+  // (or their subdomains) are not counted as a traffic source.
+  gaIgnoreReferrerDomains: gaDomainsFrom(process.env.GA_IGNORE_REFERRER_DOMAINS),
+  // Cross-domain measurement: links to these hosts carry the GA client id.
+  gaLinkedDomains: gaDomainsFrom(process.env.GA_LINKED_DOMAINS),
+  // Regions (ISO 3166, e.g. GB, CA-QC) where analytics starts denied until
+  // the visitor allows it.
+  gaConsentRequiredRegions: gaRegionsFrom(process.env.GA_CONSENT_REQUIRED_REGIONS),
 
   // The one ISV app this backend presents as.
   app: sideline,

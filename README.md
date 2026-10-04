@@ -67,6 +67,9 @@ All configuration comes from the environment; nothing host-specific is built in:
 | `OAUTH_SCOPES` | scopes requested at `/oauth/authorize` |
 | `APP_ID`, `APP_NAME`, `APP_TAGLINE`, `APP_BRAND_COLOR`, `APP_WALLET_CENTS` | optional branding and the app's starting wallet |
 | `GA_MEASUREMENT_ID` | optional: a Google Analytics 4 id (`G-...`); unset, no analytics code loads. See [Analytics (optional)](#analytics-optional) |
+| `GA_CONSENT_REQUIRED_REGIONS` | optional: comma-separated ISO 3166 codes (e.g. `GB,CA-QC`) where analytics starts denied until the visitor allows it |
+| `GA_IGNORE_REFERRER_DOMAINS` | optional: comma-separated domains whose referrals are not counted as a traffic source |
+| `GA_LINKED_DOMAINS` | optional: comma-separated hosts for cross-domain measurement |
 
 Then either:
 
@@ -264,26 +267,15 @@ no images from third parties.
 
 ## Analytics (optional)
 
-Sideline can report anonymous usage to Google Analytics 4. It is off unless
-you set `GA_MEASUREMENT_ID` (a `G-...` id) on the backend. The id reaches the
-browser at runtime through `GET /api/app`, so the same build serves every
-environment, and a fork sends nothing unless it sets its own id.
+Sideline can report anonymous usage to Google Analytics 4. It is off unless you set `GA_MEASUREMENT_ID` (a `G-...` id) on the backend. The id and the settings below reach the browser at runtime through `GET /api/app`, so the same build serves every environment, and a fork sends nothing unless it sets its own id.
 
-- **Consent first.** With an id set, a small banner asks the visitor to accept
-  or decline. Nothing from Google loads until they accept. On accept, Consent
-  Mode v2 starts with all storage denied and grants `analytics_storage` only
-  (never ads storage). The choice is kept in `localStorage`; the footer's
-  "Usage statistics" link reopens it, and declining later stops collection.
-- **What is sent.** Page views for each view (Markets, My orders, My trades,
-  Settlements, API calls); the landing view keeps its URL, so `utm_*` campaign
-  tags are counted. Events: `sign_in`, `link_start`, `link_success`,
-  `link_error`, `order_place` (number of orders only), `order_cancel`,
-  `api_calls_view`, `deposit_click` (STX deposit), `wallet_topup` (Sideline
-  wallet), `popup_blocked`, `source_click`.
-- **What is never sent.** Names, emails, STX account or user ids, order ids,
-  prices or balances.
+- **On by default, with an opt-out.** With an id set there is no banner: gtag.js loads on the first visit. Consent Mode v2 denies all ads storage and grants `analytics_storage` only. The footer has an "Opt out of usage statistics" switch. Opting out is stored in `localStorage` (`sideline.analytics-consent`), sets `ga-disable-<id>`, updates consent to denied and stops all events; on later visits gtag.js is not loaded at all. "Allow usage statistics" turns it back on.
+- **Regions that need consent first.** `GA_CONSENT_REQUIRED_REGIONS` (comma-separated ISO 3166 codes, e.g. `GB,CA-QC`) sets `analytics_storage` to denied by default in those regions for visitors who have not chosen, so Google receives cookieless pings only until they use the footer switch.
+- **Referrers and linked domains.** `GA_IGNORE_REFERRER_DOMAINS` (comma-separated) sends `ignore_referrer: true` when the visitor arrives from one of those domains or a subdomain, so your own sites do not show up as traffic sources. `GA_LINKED_DOMAINS` (comma-separated) turns on cross-domain measurement (`linker`) for those hosts.
+- **What is sent.** Page views for each view (Markets, My orders, My trades, Settlements, API calls); the landing view keeps its URL, so `utm_*` campaign tags are counted. Events: `sign_in`, `link_start`, `link_success`, `link_error`, `order_place` (number of orders only), `order_cancel`, `api_calls_view`, `deposit_click` (STX deposit), `wallet_topup` (Sideline wallet), `popup_blocked`, `source_click`.
+- **What is never sent.** Names, emails, STX account or user ids, order ids, prices or balances.
 
-The code is `frontend/src/analytics.ts` and `frontend/src/components/ConsentBanner.tsx`.
+All the `GA_*` settings are optional and empty by default. The code is `frontend/src/analytics.ts` and `frontend/src/components/AnalyticsOptOut.tsx`.
 
 ## Known limitations
 
@@ -310,7 +302,7 @@ Things the demo works around because the exchange does not offer them to apps to
 
 ```bash
 cd node-react/backend && bun install && bun test && bunx tsc --noEmit
-cd node-react/frontend && bun install && bunx tsc --noEmit && bun run build
+cd node-react/frontend && bun install && bun test && bunx tsc --noEmit && bun run build
 ```
 
 The backend tests need no network or STX account: they run the OAuth flow,

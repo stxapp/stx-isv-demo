@@ -92,12 +92,16 @@ function requireLink(user: User): AccountLink {
 // GET /api/app: the app's public profile, and where the exchange lives for the
 // browser (the deposit popup and the exchange-served sport icons). Read at
 // runtime, so moving either host is a config change with no frontend rebuild.
-// `gaMeasurementId` is the optional Google Analytics 4 id (null: analytics off).
+// `gaMeasurementId` is the optional Google Analytics 4 id (null: analytics off);
+// the other `ga*` fields are its optional settings (empty lists by default).
 apiRoutes.get("/app", (c) => {
   return c.json({
     app: publicApp(config.app),
     stxPublicUrl: config.stxPublicUrl,
     gaMeasurementId: config.gaMeasurementId,
+    gaIgnoreReferrerDomains: config.gaIgnoreReferrerDomains,
+    gaLinkedDomains: config.gaLinkedDomains,
+    gaConsentRequiredRegions: config.gaConsentRequiredRegions,
   });
 });
 

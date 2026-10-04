@@ -100,6 +100,10 @@ export interface AppResponse {
   stxPublicUrl?: string;
   // Google Analytics 4 id when the deployment enables it, else null.
   gaMeasurementId?: string | null;
+  // Optional GA settings (see analytics.ts); empty or absent when unset.
+  gaIgnoreReferrerDomains?: string[];
+  gaLinkedDomains?: string[];
+  gaConsentRequiredRegions?: string[];
 }
 
 export interface WalletState {
