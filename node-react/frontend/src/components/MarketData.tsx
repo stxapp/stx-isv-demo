@@ -89,7 +89,7 @@ export function MarketData({
   // --- Catalog (backend proxy) ---
   useEffect(() => {
     let cancelled = false;
-    fetchMarkets(500)
+    fetchMarkets()
       .then((all) => {
         if (cancelled) return;
         // Only open markets are tradeable and have a live book: hide resulted

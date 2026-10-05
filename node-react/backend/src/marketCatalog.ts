@@ -131,49 +131,131 @@ function toCatalogMarket(m: Record<string, unknown>): CatalogMarket {
   };
 }
 
+// STX's page size cap for `GET /api/v1/markets`.
+export const PAGE_SIZE = 200;
+// Safety valve: stop after this many markets (50 pages) and flag the result.
+export const MAX_MARKETS = 50 * PAGE_SIZE;
+// How long one fetched catalog is served before the next request refetches it.
+export const CATALOG_TTL_MS = 60_000;
+
+// The query every catalog fetch sends: only OPEN markets are tradeable and have
+// a live book, so STX filters server-side.
+export const CATALOG_QUERY = { status: ["open"], limit: PAGE_SIZE };
+
 export interface CatalogResult {
-  // The upstream HTTP status of the last page fetched (2xx on success).
+  // STX's HTTP status: 200 when every page came back, else the failing page's
+  // status (502 when STX could not be reached).
   status: number;
   markets: CatalogMarket[];
-  // The first page as STX returned it (items + cursor), or STX's error body:
-  // the activity row's response detail.
+  // Pages read, including a failing one.
+  pages: number;
+  // True when MAX_MARKETS stopped the walk before the cursor ran out.
+  truncated: boolean;
+  // The first page as STX returned it, or STX's error body when the first page
+  // failed: the activity row's response detail.
   firstPage?: unknown;
 }
 
-// Fetch the catalog with the SDK's app-token client, following STX's opaque cursor until we
-// have `limit` markets, the collection is exhausted, or a page errors. Bounded
-// page count as a safety valve. `status` narrows server-side (e.g. ["open"]).
-export async function fetchCatalog(
-  app: AppProfile,
-  opts: { status: string[]; limit: number },
-): Promise<CatalogResult> {
-  const { catalog } = stxApp(app);
+// The part of the SDK client the catalog walk uses (a stub in tests).
+export interface CatalogClient {
+  iterMarkets(query: typeof CATALOG_QUERY): AsyncIterable<Market>;
+}
+
+// Read every open market, letting the SDK's `iterMarkets` follow STX's opaque
+// cursor page by page. A page that fails part-way keeps the markets read so far
+// and reports that page's status; the caller decides whether a partial catalog
+// is usable.
+export async function fetchAllMarkets(client: CatalogClient): Promise<CatalogResult> {
   const markets: CatalogMarket[] = [];
-  let cursor: string | undefined;
-  let lastStatus = 0;
+  const first: unknown[] = [];
+  let status = 200;
+  let truncated = false;
   let firstPage: unknown;
 
-  for (let page = 0; page < 20 && markets.length < opts.limit; page++) {
-    let items: Market[];
-    try {
-      const res = await catalog.markets({ status: opts.status, limit: opts.limit, cursor });
-      items = res.items;
-      cursor = res.cursor ?? undefined;
-      if (page === 0) firstPage = { markets: items, cursor: cursor ?? null };
-      lastStatus = 200;
-    } catch (err) {
-      // STX's status for the activity log and the route's answer; 502 when STX
-      // could not be reached at all.
-      const stxErr = stxErrorResponse(err);
-      lastStatus = stxErr?.status ?? 502;
-      if (page === 0) firstPage = stxErr?.body ?? { error: (err as Error).message };
-      break;
+  try {
+    for await (const m of client.iterMarkets(CATALOG_QUERY)) {
+      if (markets.length >= MAX_MARKETS) {
+        truncated = true;
+        break;
+      }
+      if (first.length < PAGE_SIZE) first.push(m);
+      markets.push(toCatalogMarket(m as unknown as Record<string, unknown>));
     }
-    for (const m of items) markets.push(toCatalogMarket(m as unknown as Record<string, unknown>));
-    if (!cursor || items.length === 0) break;
+  } catch (err) {
+    const stxErr = stxErrorResponse(err);
+    status = stxErr?.status ?? 502;
+    if (markets.length === 0) firstPage = stxErr?.body ?? { error: (err as Error).message };
   }
 
-  return { status: lastStatus, markets: markets.slice(0, opts.limit), firstPage };
+  if (firstPage === undefined) firstPage = { markets: first };
+  const pages = Math.max(1, Math.ceil(markets.length / PAGE_SIZE) + (status === 200 ? 0 : 1));
+  return { status, markets, pages, truncated, firstPage };
+}
+
+// Every open market for one app profile, read with its app token.
+export function fetchCatalog(app: AppProfile): Promise<CatalogResult> {
+  return fetchAllMarkets(stxApp(app).catalog);
+}
+
+export interface CachedCatalog {
+  // What to serve: the fresh fetch, or the last good one when a refetch failed.
+  result: CatalogResult;
+  // The fetch this request ran, when it ran one (for the activity log). Unset
+  // when the request was served from the cache or joined another's fetch.
+  fetched?: CatalogResult;
+  // True when a refetch failed and an older catalog is served instead.
+  stale: boolean;
+}
+
+// One catalog per app profile, refetched once it is older than `ttlMs`.
+// Concurrent requests share one fetch. Only a complete fetch is cached: when a
+// refetch fails, the last good catalog is served (marked stale), or, with none,
+// whatever the failed fetch read; either way the next request tries again.
+export class CatalogCache {
+  #entry: { at: number; result: CatalogResult } | undefined;
+  #inflight: Promise<CachedCatalog> | undefined;
+
+  constructor(
+    private readonly load: () => Promise<CatalogResult>,
+    private readonly ttlMs = CATALOG_TTL_MS,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  async get(): Promise<CachedCatalog> {
+    if (this.#entry && this.now() - this.#entry.at < this.ttlMs) {
+      return { result: this.#entry.result, stale: false };
+    }
+    if (this.#inflight) {
+      const shared = await this.#inflight;
+      return { result: shared.result, stale: shared.stale };
+    }
+    this.#inflight = this.#refetch().finally(() => {
+      this.#inflight = undefined;
+    });
+    return this.#inflight;
+  }
+
+  async #refetch(): Promise<CachedCatalog> {
+    const fetched = await this.load();
+    if (fetched.status === 200) {
+      this.#entry = { at: this.now(), result: fetched };
+      return { result: fetched, fetched, stale: false };
+    }
+    if (this.#entry) return { result: this.#entry.result, fetched, stale: true };
+    return { result: fetched, fetched, stale: false };
+  }
+}
+
+const caches = new Map<string, CatalogCache>();
+
+// The shared catalog cache for an app profile.
+export function catalogCacheFor(app: AppProfile): CatalogCache {
+  let cache = caches.get(app.id);
+  if (!cache) {
+    cache = new CatalogCache(() => fetchCatalog(app));
+    caches.set(app.id, cache);
+  }
+  return cache;
 }
 
 // ---- recent trades ------------------------------------------------------------

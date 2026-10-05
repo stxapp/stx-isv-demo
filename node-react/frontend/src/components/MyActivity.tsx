@@ -35,7 +35,7 @@ export function MyActivity({
   const [markets, setMarkets] = useState<Map<string, MarketSummary>>(new Map());
   useEffect(() => {
     let cancelled = false;
-    fetchMarkets(500)
+    fetchMarkets()
       .then((list) => {
         if (!cancelled) setMarkets(new Map(list.map((m) => [m.marketId, m])));
       })
