@@ -23,7 +23,7 @@ import { MARKET_DATA_SCOPE, memberClient, NotLinkedError, stxApp, stxErrorRespon
 import { sdkCalls } from "../sdkCall";
 import { streamSSE } from "hono/streaming";
 import { closeLiveFeed, liveBalance, subscribe, type LiveMessage } from "../liveProxy";
-import { fetchCatalog, fetchRecentTrades } from "../marketCatalog";
+import { CATALOG_QUERY, catalogCacheFor, fetchRecentTrades } from "../marketCatalog";
 import { MARKET_TOPICS, subscribeMarket, type MarketTopic } from "../marketProxy";
 
 export const apiRoutes = new Hono();
@@ -459,37 +459,39 @@ apiRoutes.get("/stream", (c) => {
   });
 });
 
-// GET /api/markets?app=<id>&limit= -> the PUBLIC market catalog. No member or
-// session needed; the backend attributes the read to the app with an app token
-// (client_credentials, scope market_data), fetches STX's REST
-// `GET /api/v1/markets` and reshapes it into the catalog shape the frontend
-// consumes. Replaces the browser's old direct GraphQL `marketInfos` call.
+// GET /api/markets?app=<id> -> the PUBLIC market catalog: every open market.
+// No member or session needed; the backend attributes the read to the app with
+// an app token (client_credentials, scope market_data), walks STX's REST
+// `GET /api/v1/markets` to the last page with the SDK's `iterMarkets`, and
+// reshapes it into the catalog shape the frontend consumes. The result is
+// cached per app for CATALOG_TTL_MS, so only a real fetch is logged.
 apiRoutes.get("/markets", async (c) => {
   const app = requireApp(c);
-  const limit = Math.min(Number(c.req.query("limit") ?? 500), 1000);
-  // Only OPEN markets are tradeable and have a live book: filter server-side.
-  const query = { status: ["open"], limit };
-  const { status, markets, firstPage } = await fetchCatalog(app, query);
-  activityStore.record({
-    ts: Date.now(),
-    appId: app.id,
-    method: "GET",
-    path: config.paths.markets,
-    status,
-    note: status >= 200 && status < 300 ? `Loaded ${markets.length} markets` : "Market catalog failed",
-    sdkCall: sdkCalls.markets(MARKET_DATA_SCOPE, query),
-    detail: buildDetail({
+  const { result, fetched, stale } = await catalogCacheFor(app).get();
+  if (fetched) {
+    const ok = fetched.status === 200;
+    const loaded = `${fetched.markets.length} open markets in ${fetched.pages} ${fetched.pages === 1 ? "page" : "pages"}`;
+    activityStore.record({
+      ts: Date.now(),
+      appId: app.id,
       method: "GET",
-      path: `${config.paths.markets}?status=${query.status.join(",")}&limit=${query.limit}`,
-      status,
-      responseBody: firstPage,
-      summary: `${markets.length} open markets loaded (first page shown)`,
-    }),
-  });
-  if (status < 200 || status >= 300) {
-    return c.json({ error: "catalog_unavailable", markets: [] }, (status || 502) as never);
+      path: config.paths.markets,
+      status: fetched.status,
+      note: ok ? `Loaded ${loaded}` : `Market catalog failed after ${loaded}`,
+      sdkCall: sdkCalls.iterMarkets(MARKET_DATA_SCOPE, CATALOG_QUERY),
+      detail: buildDetail({
+        method: "GET",
+        path: `${config.paths.markets}?status=${CATALOG_QUERY.status.join(",")}&limit=${CATALOG_QUERY.limit}`,
+        status: fetched.status,
+        responseBody: fetched.firstPage,
+        summary: `${loaded}${fetched.truncated ? " (stopped at the cap)" : ""} (first page shown)`,
+      }),
+    });
   }
-  return c.json({ markets });
+  if (result.status !== 200 && result.markets.length === 0) {
+    return c.json({ error: "catalog_unavailable", markets: [] }, (result.status || 502) as never);
+  }
+  return c.json({ markets: result.markets, stale, truncated: result.truncated });
 });
 
 // GET /api/markets/:id/trades?app=<id> -> the market's recent public trades

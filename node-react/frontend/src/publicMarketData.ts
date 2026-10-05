@@ -102,13 +102,13 @@ export interface Participant {
   abbreviation: string | null;
 }
 
-// Fetches the market catalog from the backend. `limit` bounds the list. The
-// backend narrows to OPEN markets and reshapes STX's REST response into
-// `MarketSummary`. Sends the session cookie + active app (same as every /api
-// call) so the read is attributed to the right app profile. Throws with a
-// readable message on transport errors so the caller can surface them.
-export async function fetchMarkets(limit = 500): Promise<MarketSummary[]> {
-  const res = await fetch(`${BACKEND}/api/markets?limit=${limit}`, {
+// Fetches the market catalog from the backend: every open market. The backend
+// walks STX's pages, caches the result for a minute, and reshapes STX's REST
+// response into `MarketSummary`. Sends the session cookie + active app (same as
+// every /api call) so the read is attributed to the right app profile. Throws
+// with a readable message on transport errors so the caller can surface them.
+export async function fetchMarkets(): Promise<MarketSummary[]> {
+  const res = await fetch(`${BACKEND}/api/markets`, {
     credentials: "include",
     headers: { Accept: "application/json" },
   });

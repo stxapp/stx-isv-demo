@@ -60,8 +60,9 @@ export const sdkCalls = {
 
   // ---- app-token REST (catalog = oauth.appClient("market_data")) -------------
 
-  markets: (scope: string, query: { status: string[]; limit: number }) =>
-    `oauth.appClient(${lit(scope)}).markets(${lit(query)})`,
+  // Every page: the SDK follows STX's cursor until it runs out.
+  iterMarkets: (scope: string, query: { status: string[]; limit: number }) =>
+    `for await (const market of oauth.appClient(${lit(scope)}).iterMarkets(${lit(query)}))`,
   market: (scope: string, marketId: string) => `oauth.appClient(${lit(scope)}).market(${lit(shortId(marketId))})`,
 
   // ---- sockets ------------------------------------------------------------------
