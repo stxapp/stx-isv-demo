@@ -18,6 +18,7 @@ import { buildDetail } from "../activityDetail";
 import { config, type AppProfile } from "../config";
 import { appFromRequest, centsToDollarString, extractStxCashCents } from "../helpers";
 import { getOrCreateSession, getSession } from "../session";
+import { privyEnabled, verifyPrivyUser } from "../privy";
 import { activityStore, linkStore, userStore, type AccountLink, type User } from "../stores";
 import { MARKET_DATA_SCOPE, memberClient, NotLinkedError, stxApp, stxErrorResponse, type SdkCall } from "../stx";
 import { sdkCalls } from "../sdkCall";
@@ -102,6 +103,39 @@ apiRoutes.get("/app", (c) => {
     gaIgnoreReferrerDomains: config.gaIgnoreReferrerDomains,
     gaLinkedDomains: config.gaLinkedDomains,
     gaConsentRequiredRegions: config.gaConsentRequiredRegions,
+    // Public: the browser's Privy SDK needs it. Null: the mock sign-in.
+    privyAppId: privyEnabled() ? config.privyAppId : null,
+  });
+});
+
+// POST /api/login/privy?app=<id>: sign in with the app's own login (Privy).
+// Body: { accessToken } from the browser's Privy SDK. The token is verified
+// here; the user is keyed on the Privy user id, so a returning user gets their
+// wallet and STX link back on any browser. Answers with the hint for the STX
+// connect step (how they signed in, and their email).
+apiRoutes.post("/login/privy", async (c) => {
+  const app = requireApp(c);
+  if (!privyEnabled()) return c.json({ error: "privy_not_configured" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as { accessToken?: unknown };
+  if (typeof body.accessToken !== "string" || body.accessToken === "") {
+    return c.json({ error: "missing_access_token" }, 400);
+  }
+  let who;
+  try {
+    who = await verifyPrivyUser(body.accessToken);
+  } catch {
+    return c.json({ error: "invalid_privy_token" }, 401);
+  }
+  const user = userStore.signInExternal({
+    sessionId: getOrCreateSession(c),
+    appId: app.id,
+    externalId: who.userId,
+    name: who.name,
+    startingWalletCents: app.startingWalletCents,
+  });
+  return c.json({
+    user: publicUser(user),
+    connectHint: { connection: who.connection ?? null, loginHint: who.email ?? null },
   });
 });
 
@@ -110,6 +144,8 @@ apiRoutes.get("/app", (c) => {
 // the user already being a Sideline customer). Idempotent.
 apiRoutes.post("/login", async (c) => {
   const app = requireApp(c);
+  // With a real login configured, the mock one is off.
+  if (privyEnabled()) return c.json({ error: "use_privy_login" }, 404);
   const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
   const name =
     typeof body.name === "string" && body.name.trim() !== ""
@@ -133,7 +169,11 @@ apiRoutes.post("/signout", async (c) => {
   const sid = getSession(c);
   if (sid) {
     const user = userStore.find(sid, app.id);
-    if (user) {
+    if (user?.externalId) {
+      // A real login (Privy): sign out of this browser only. The user, their
+      // wallet and their STX connection stay for the next sign-in.
+      userStore.detachSession(sid, app.id);
+    } else if (user) {
       await revokeAndDropLink(app, user);
       userStore.remove(sid, app.id);
     }

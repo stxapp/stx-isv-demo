@@ -114,6 +114,12 @@ addColumnIfMissing("activity", "sdk_call", "TEXT");
 // the ISV user it was made for; both null on older rows and app-level calls.
 addColumnIfMissing("activity", "detail", "TEXT");
 addColumnIfMissing("activity", "user_id", "TEXT");
+// The user's id in the app's own login (Privy), when there is one. A returning
+// user is found by it from any browser, with their wallet and STX link.
+addColumnIfMissing("users", "external_id", "TEXT");
+db.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS users_app_external ON users (app_id, external_id) WHERE external_id IS NOT NULL`,
+);
 
 // ---- Re-home rows after an app is renamed -----------------------------------
 //

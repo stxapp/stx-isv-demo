@@ -150,6 +150,12 @@ export const config = {
   // SQLite file, mounted on a volume in Docker so state survives a restart.
   dbPath: optional("DB_PATH", "./data/isv.sqlite"),
 
+  // Privy (https://privy.io) as the app's own login. With both set, sign-in is a
+  // real Privy login (email, Google, X) and the mock sign-in is off; the App ID
+  // is public and sent to the browser (GET /api/app), the secret stays here.
+  privyAppId: optionalRaw("PRIVY_APP_ID") ?? null,
+  privyAppSecret: optionalRaw("PRIVY_APP_SECRET") ?? null,
+
   // Cookie flags. Set COOKIE_SECURE=true behind HTTPS.
   cookieSecure: optional("COOKIE_SECURE", "false") === "true",
 } as const;

@@ -10,6 +10,7 @@ import { buildDetail } from "../activityDetail";
 import { config, getApp } from "../config";
 import { appFromRequest } from "../helpers";
 import { getOrCreateSession } from "../session";
+import { privyEnabled } from "../privy";
 import { sdkCalls } from "../sdkCall";
 import { activityStore, userStore } from "../stores";
 import { pendingStore, stxApp, type FlowData } from "../stx";
@@ -73,22 +74,29 @@ authRoutes.get("/login", async (c) => {
 
   const sessionId = getOrCreateSession(c);
 
-  // Linking attaches the STX grant to a Sideline user. A visitor who taps "Link
-  // your STX account" before signing in gets the demo user the mock sign-in
-  // would have made (same name, same starting wallet), so the button works
-  // from anywhere.
-  const user = userStore.ensure({
-    sessionId,
-    appId: app.id,
-    name: `${app.name} demo user`,
-    startingWalletCents: app.startingWalletCents,
-  });
+  // Linking attaches the STX grant to a Sideline user. With a real login
+  // (Privy) the user must be signed in first. With the mock sign-in, a visitor
+  // who taps "Link your STX account" before signing in gets the demo user the
+  // mock sign-in would have made, so the button works from anywhere.
+  const signedIn = userStore.find(sessionId, app.id);
+  if (privyEnabled() && !signedIn) return finishLink(c, "error=not_signed_in");
+  const user =
+    signedIn ??
+    userStore.ensure({
+      sessionId,
+      appId: app.id,
+      name: `${app.name} demo user`,
+      startingWalletCents: app.startingWalletCents,
+    });
 
   // The SDK makes the PKCE verifier + S256 challenge and the state, persists
   // them (and which app/user this grant links to) in auth_flows, and builds
   // STX's /authorize URL with THIS app's client id, redirect URI and scopes.
   const data: FlowData = { sessionId, appId: app.id, userId: user.id };
-  const auth = await stxApp(app).oauth.beginAuthorization(pendingStore, { data: { ...data } });
+  const auth = await stxApp(app).oauth.beginAuthorization(pendingStore, {
+    data: { ...data },
+    extraParams: connectHints(c.req.query("connection"), c.req.query("login_hint")),
+  });
   // No STX request yet: the browser follows this redirect to STX's consent page.
   activityStore.record({
     ts: Date.now(),
@@ -103,6 +111,16 @@ authRoutes.get("/login", async (c) => {
   });
   return c.redirect(auth.url);
 });
+
+// Hints from the app's own login for STX's sign-in: `connection` goes straight
+// to the same provider (google, apple or x), `login_hint` preselects the
+// account. Anything else is dropped. Hints only: the member still signs in.
+export function connectHints(connection?: string, loginHint?: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (connection && ["google", "apple", "x"].includes(connection)) params.connection = connection;
+  if (loginHint && loginHint.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(loginHint)) params.login_hint = loginHint;
+  return params;
+}
 
 // The /authorize redirect as a detail: the query the browser was sent with,
 // minus the one-time state (a CSRF secret until the callback uses it).

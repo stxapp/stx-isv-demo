@@ -3,6 +3,8 @@ import { api, BACKEND, type MeState, type PublicApp } from "./api";
 import { marketLabel, setStxUrl, stxHost, type MarketBrief, type MarketSummary } from "./publicMarketData";
 import { IsvLogo } from "./components/IsvLogo";
 import { SignIn } from "./components/SignIn";
+import { PrivySignIn } from "./components/PrivySignIn";
+import { privyActions } from "./privyBridge";
 import { Wallets } from "./components/Wallets";
 import { AccountMenu } from "./components/AccountMenu";
 import { LiveFeed } from "./components/LiveFeed";
@@ -49,7 +51,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 // Main column: the public, credential-free live markets with scores. Side
 // column: the member journey (sign in, dual wallet, link STX) and the betslip,
 // which appears when a market is tapped.
-export function App() {
+export function App({ privy = false }: { privy?: boolean } = {}) {
   const [profile, setProfile] = useState<PublicApp | null>(null);
   const [me, setMe] = useState<MeState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -236,6 +238,9 @@ export function App() {
 
   async function handleSignout() {
     await api.signout();
+    // Signing out of the app also signs out of its login (Privy). The STX
+    // connection stays with the user for their next sign-in.
+    await privyActions.logout?.();
     await afterAuthChange();
   }
 
@@ -371,7 +376,12 @@ export function App() {
               </div>
             ) : (
               <>
-                {!me?.user && <SignIn app={app} onSignedIn={afterAuthChange} />}
+                {!me?.user &&
+                  (privy ? (
+                    <PrivySignIn app={app} onSignedIn={afterAuthChange} />
+                  ) : (
+                    <SignIn app={app} onSignedIn={afterAuthChange} />
+                  ))}
                 {me?.user && <Wallets app={app} linked={linked} refreshKey={refreshKey} />}
                 {/* Appears when a market is tapped; unlinked, it carries the
                     link call to action where the order would go. */}
