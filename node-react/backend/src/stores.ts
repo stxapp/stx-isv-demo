@@ -19,6 +19,8 @@ export interface User {
   name: string;
   walletCents: number;
   createdAt: number;
+  // The user's id in the app's own login (Privy), or null for the mock sign-in.
+  externalId: string | null;
 }
 
 export interface UserStore {
@@ -32,6 +34,20 @@ export interface UserStore {
   }): User;
   get(userId: string): User | null;
   find(sessionId: string, appId: string): User | null;
+  // Sign in a user of the app's own login (externalId: the Privy user id) on
+  // this browser session. A returning user gets their existing row (wallet and
+  // STX link), moved to this session; a first sign-in adopts this session's
+  // mock user if there is one, else creates the user.
+  signInExternal(args: {
+    sessionId: string;
+    appId: string;
+    externalId: string;
+    name: string;
+    startingWalletCents: number;
+  }): User;
+  // Detach the user from this browser session without deleting them, so the
+  // next sign-in (any browser) finds their wallet and STX link again.
+  detachSession(sessionId: string, appId: string): void;
   // Remove the user for (session, app). The caller removes any link first.
   remove(sessionId: string, appId: string): void;
   // Add demo funds to the user's own wallet; returns the updated user.
@@ -126,6 +142,7 @@ export const userStore: UserStore = {
       name,
       walletCents: startingWalletCents,
       createdAt: Date.now(),
+      externalId: null,
     };
     db.query(
       `INSERT INTO users (id, session_id, app_id, name, wallet_cents, created_at)
@@ -155,6 +172,47 @@ export const userStore: UserStore = {
     return row ? rowToUser(row) : null;
   },
 
+  signInExternal({ sessionId, appId, externalId, name, startingWalletCents }) {
+    const returning = db
+      .query(`SELECT * FROM users WHERE app_id = $app AND external_id = $ext`)
+      .get({ $app: appId, $ext: externalId }) as UserRow | null;
+    const here = this.find(sessionId, appId);
+    if (returning) {
+      if (here && here.id !== returning.id) {
+        // This browser held another user (a mock one, or someone else signed in
+        // before): it leaves the session; a mock user with no login is dropped.
+        if (here.externalId) this.detachSession(sessionId, appId);
+        else {
+          linkStore.delete(here.id);
+          this.remove(sessionId, appId);
+        }
+      }
+      db.query(`UPDATE users SET session_id = $sid WHERE id = $id`).run({ $sid: sessionId, $id: returning.id });
+      return this.get(returning.id) as User;
+    }
+    if (here && !here.externalId) {
+      db.query(`UPDATE users SET external_id = $ext, name = $name WHERE id = $id`).run({
+        $ext: externalId,
+        $name: name,
+        $id: here.id,
+      });
+      return this.get(here.id) as User;
+    }
+    if (here) this.detachSession(sessionId, appId);
+    const user = this.ensure({ sessionId, appId, name, startingWalletCents });
+    db.query(`UPDATE users SET external_id = $ext WHERE id = $id`).run({ $ext: externalId, $id: user.id });
+    return this.get(user.id) as User;
+  },
+
+  detachSession(sessionId, appId) {
+    // A detached user keeps a unique placeholder session, so (session, app)
+    // stays unique and no browser holds them until they sign in again.
+    db.query(`UPDATE users SET session_id = 'detached:' || id WHERE session_id = $sid AND app_id = $app`).run({
+      $sid: sessionId,
+      $app: appId,
+    });
+  },
+
   remove(sessionId, appId) {
     db.query(`DELETE FROM users WHERE session_id = $sid AND app_id = $app`).run({
       $sid: sessionId,
@@ -178,6 +236,7 @@ interface UserRow {
   name: string;
   wallet_cents: number;
   created_at: number;
+  external_id: string | null;
 }
 
 function rowToUser(row: UserRow): User {
@@ -188,6 +247,7 @@ function rowToUser(row: UserRow): User {
     name: row.name,
     walletCents: row.wallet_cents,
     createdAt: row.created_at,
+    externalId: row.external_id ?? null,
   };
 }
 

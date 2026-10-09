@@ -96,6 +96,8 @@ export interface MeState {
 
 export interface AppResponse {
   app: PublicApp;
+  // The Privy App ID when the app's own login is Privy; null for the mock sign-in.
+  privyAppId?: string | null;
   // The exchange's public origin (deposit popup, sport icons).
   stxPublicUrl?: string;
   // Google Analytics 4 id when the deployment enables it, else null.
@@ -194,9 +196,37 @@ export function openStxPopup(url: string, name: string, size?: { w: number; h: n
 
 // Login/consent is a tall, narrow form; the deposit page (card form + methods)
 // wants a bit more room. Callers size each popup for its content.
+// How the user signed in to the app's own login, passed to STX as hints:
+// `connection` goes straight to the same provider, `login_hint` preselects the
+// account. Set after a Privy sign-in; empty for the mock sign-in.
+export interface ConnectHint {
+  connection: string | null;
+  loginHint: string | null;
+}
+let connectHint: ConnectHint = { connection: null, loginHint: null };
+export function setConnectHint(hint: ConnectHint): void {
+  connectHint = hint;
+}
+
+// Phones get a full-page redirect instead of a popup; /callback sends the
+// member back here when there is no opener.
+function smallScreen(): boolean {
+  return window.matchMedia?.("(max-width: 640px)").matches ?? false;
+}
+
+export function linkUrl(hint: ConnectHint = connectHint): string {
+  const q = new URLSearchParams();
+  if (hint.connection) q.set("connection", hint.connection);
+  if (hint.loginHint) q.set("login_hint", hint.loginHint);
+  const qs = q.toString();
+  return `${BACKEND}/login${qs ? `?${qs}` : ""}`;
+}
+
 export function startLink(): void {
   track("link_start");
-  openStxPopup(`${BACKEND}/login`, "stx_link", { w: 460, h: 720 });
+  const url = linkUrl();
+  if (smallScreen()) window.location.assign(url);
+  else openStxPopup(url, "stx_link", { w: 460, h: 720 });
 }
 
 // URL of the member's live SSE feed (see LiveFeed / backend /api/stream).
@@ -214,6 +244,12 @@ export const api = {
     req<{ user: DemoUser }>("/api/login", {
       method: "POST",
       body: JSON.stringify({ name: name ?? "" }),
+    }),
+  // Sign in with the app's own login (Privy): the server verifies the token.
+  privyLogin: (accessToken: string) =>
+    req<{ user: DemoUser; connectHint: ConnectHint }>("/api/login/privy", {
+      method: "POST",
+      body: JSON.stringify({ accessToken }),
     }),
   signout: () => req<{ ok: boolean }>("/api/signout", { method: "POST" }),
   unlink: () => req<{ ok: boolean }>("/api/unlink", { method: "POST" }),
