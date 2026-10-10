@@ -27,6 +27,14 @@ export const authRoutes = new Hono();
 // opener is dropped by the browser, so posting to both is safe. If the page
 // was opened top-level (popup blocked, or hit directly), there is no opener, so
 // it falls back to the original redirect and behaves exactly as before.
+// A value written into the result page's inline script. JSON alone is not
+// enough there: the outcome carries text from the callback's query string, so
+// the characters HTML or the script parser treat specially are written as \u
+// escapes, which JavaScript reads back as the same text.
+export function forScript(value: unknown): string {
+  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 function finishLink(c: Context, query: string) {
   const params = new URLSearchParams(query);
   const status = params.has("linked") ? "linked" : "error";
@@ -47,17 +55,17 @@ function finishLink(c: Context, query: string) {
 </div>
 <script>
 (function(){
-  var msg = ${JSON.stringify(msg)};
-  var q = ${JSON.stringify(query)};
+  var msg = ${forScript(msg)};
+  var q = ${forScript(query)};
   try {
     if (window.opener && !window.opener.closed) {
-      var targets = [window.location.origin, ${JSON.stringify(new URL(config.frontendUrl).origin)}];
+      var targets = [window.location.origin, ${forScript(new URL(config.frontendUrl).origin)}];
       targets.forEach(function(t, i){ if (targets.indexOf(t) === i) window.opener.postMessage(msg, t); });
       setTimeout(function(){ try { window.close(); } catch (e) {} }, 250);
       return;
     }
   } catch (e) {}
-  window.location.replace(${JSON.stringify(config.frontendUrl)} + "/?" + q);
+  window.location.replace(${forScript(config.frontendUrl)} + "/?" + q);
 })();
 </script>
 </body></html>`;

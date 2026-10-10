@@ -36,8 +36,8 @@ export interface UserStore {
   find(sessionId: string, appId: string): User | null;
   // Sign in a user of the app's own login (externalId: the Privy user id) on
   // this browser session. A returning user gets their existing row (wallet and
-  // STX link), moved to this session; a first sign-in adopts this session's
-  // mock user if there is one, else creates the user.
+  // STX link), moved to this session; a first sign-in creates the user. A mock
+  // user already on the session is removed, never taken over.
   signInExternal(args: {
     sessionId: string;
     appId: string;
@@ -190,15 +190,16 @@ export const userStore: UserStore = {
       db.query(`UPDATE users SET session_id = $sid WHERE id = $id`).run({ $sid: sessionId, $id: returning.id });
       return this.get(returning.id) as User;
     }
+    // A first sign-in never takes over whoever was on this browser before. A
+    // mock user there has no account behind it, so nothing says it is the same
+    // person: it is removed, with any STX link it had, and the person signing
+    // in links STX themselves.
     if (here && !here.externalId) {
-      db.query(`UPDATE users SET external_id = $ext, name = $name WHERE id = $id`).run({
-        $ext: externalId,
-        $name: name,
-        $id: here.id,
-      });
-      return this.get(here.id) as User;
+      linkStore.delete(here.id);
+      this.remove(sessionId, appId);
+    } else if (here) {
+      this.detachSession(sessionId, appId);
     }
-    if (here) this.detachSession(sessionId, appId);
     const user = this.ensure({ sessionId, appId, name, startingWalletCents });
     db.query(`UPDATE users SET external_id = $ext WHERE id = $id`).run({ $ext: externalId, $id: user.id });
     return this.get(user.id) as User;
@@ -206,8 +207,11 @@ export const userStore: UserStore = {
 
   detachSession(sessionId, appId) {
     // A detached user keeps a unique placeholder session, so (session, app)
-    // stays unique and no browser holds them until they sign in again.
-    db.query(`UPDATE users SET session_id = 'detached:' || id WHERE session_id = $sid AND app_id = $app`).run({
+    // stays unique and no browser holds them until they sign in again. The
+    // placeholder is random, never derived from the user id (which the browser
+    // knows), and session.ts refuses any cookie that looks like one.
+    db.query(`UPDATE users SET session_id = $placeholder WHERE session_id = $sid AND app_id = $app`).run({
+      $placeholder: `detached:${crypto.randomUUID()}${crypto.randomUUID()}`,
       $sid: sessionId,
       $app: appId,
     });

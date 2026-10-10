@@ -89,6 +89,48 @@ describe("Privy login", () => {
   });
 });
 
+describe("signed-out users and earlier visitors", () => {
+  test("a signed-out user cannot be signed back in by a cookie built from what the browser knew", async () => {
+    privyUser("did:privy:out");
+    const sid = `s-${crypto.randomUUID()}`;
+    await privyLogin(sid, "token-did:privy:out");
+    const user = userStore.find(sid, "sideline")!;
+    await apiRoutes.request("/signout", { method: "POST", headers: { cookie: `isv_sid=${sid}` } });
+
+    const held = userStore.get(user.id)!.sessionId;
+    expect(held).not.toContain(user.id);
+    for (const cookie of [`detached:${user.id}`, held]) {
+      const res = await apiRoutes.request("/me", { headers: { cookie: `isv_sid=${cookie}` } });
+      expect(((await res.json()) as { user: unknown }).user).toBeNull();
+    }
+  });
+
+  test("a first sign-in does not take over a mock user on the browser, or its STX link", async () => {
+    const sid = `s-${crypto.randomUUID()}`;
+    const mock = userStore.ensure({ sessionId: sid, appId: "sideline", name: "Earlier visitor", startingWalletCents: 1 });
+    linkStore.save({ userId: mock.id, appId: "sideline", accessToken: "their-at", refreshToken: "their-rt", accessExpiresAt: null, scopes: [] });
+
+    privyUser("did:privy:new");
+    await privyLogin(sid, "token-did:privy:new");
+    const user = userStore.find(sid, "sideline")!;
+    expect(user.id).not.toBe(mock.id);
+    expect(linkStore.get(user.id)).toBeNull();
+    expect(userStore.get(mock.id)).toBeNull();
+    expect(linkStore.get(mock.id)).toBeNull();
+  });
+});
+
+describe("the page that ends linking", () => {
+  test("text from the callback's query stays data in the page's script", async () => {
+    const text = encodeURIComponent("</script><b>&");
+    const page = await (await authRoutes.request(`/callback?error=${text}`)).text();
+    expect(page.match(/<script>/g)).toHaveLength(1);
+    expect(page.match(/<\/script>/g)).toHaveLength(1);
+    expect(page).not.toContain("<b>");
+    expect(page).toContain("\\u003c/script\\u003e\\u003cb\\u003e\\u0026");
+  });
+});
+
 describe("STX connect after Privy", () => {
   test("connecting needs a signed-in user", async () => {
     privyUser("did:privy:f");
