@@ -10,6 +10,14 @@ import { config } from "./config";
 
 const COOKIE_NAME = "isv_sid";
 
+// The id in the cookie, if it is one this app could have issued. Ids are
+// base64url, so anything with another character is refused; that includes the
+// placeholders the store gives signed-out users ("detached:...").
+function cookieSession(c: Context): string | undefined {
+  const value = getCookie(c, COOKIE_NAME);
+  return value && /^[A-Za-z0-9_-]+$/.test(value) ? value : undefined;
+}
+
 function newSessionId(): string {
   const buf = new Uint8Array(24);
   crypto.getRandomValues(buf);
@@ -18,7 +26,7 @@ function newSessionId(): string {
 
 // Returns the existing session id from the cookie, or mints one and sets it.
 export function getOrCreateSession(c: Context): string {
-  const existing = getCookie(c, COOKIE_NAME);
+  const existing = cookieSession(c);
   if (existing) return existing;
 
   const sid = newSessionId();
@@ -33,7 +41,7 @@ export function getOrCreateSession(c: Context): string {
 }
 
 export function getSession(c: Context): string | undefined {
-  return getCookie(c, COOKIE_NAME);
+  return cookieSession(c);
 }
 
 export function clearSession(c: Context): void {
