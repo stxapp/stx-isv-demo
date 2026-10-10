@@ -110,8 +110,20 @@ describe("signed-out users and earlier visitors", () => {
     const mock = userStore.ensure({ sessionId: sid, appId: "sideline", name: "Earlier visitor", startingWalletCents: 1 });
     linkStore.save({ userId: mock.id, appId: "sideline", accessToken: "their-at", refreshToken: "their-rt", accessExpiresAt: null, scopes: [] });
 
+    // The earlier visitor's link is ended at STX, not just forgotten here.
+    const revoked: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith("/oauth/revoke")) revoked.push(new URLSearchParams(String(init?.body)).get("token") ?? "");
+      return new Response("", { status: 200 });
+    }) as typeof fetch;
     privyUser("did:privy:new");
-    await privyLogin(sid, "token-did:privy:new");
+    try {
+      await privyLogin(sid, "token-did:privy:new");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(revoked).toEqual(["their-rt"]);
     const user = userStore.find(sid, "sideline")!;
     expect(user.id).not.toBe(mock.id);
     expect(linkStore.get(user.id)).toBeNull();

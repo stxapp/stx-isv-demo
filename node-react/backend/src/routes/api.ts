@@ -126,8 +126,13 @@ apiRoutes.post("/login/privy", async (c) => {
   } catch {
     return c.json({ error: "invalid_privy_token" }, 401);
   }
+  // A mock user on this browser is about to be replaced (see signInExternal).
+  // End its STX link properly first: revoke at STX and close its live feed.
+  const sessionId = getOrCreateSession(c);
+  const here = userStore.find(sessionId, app.id);
+  if (here && !here.externalId) await revokeAndDropLink(app, here);
   const user = userStore.signInExternal({
-    sessionId: getOrCreateSession(c),
+    sessionId,
     appId: app.id,
     externalId: who.userId,
     name: who.name,
