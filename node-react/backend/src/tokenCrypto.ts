@@ -17,6 +17,11 @@ function keyFromEnv(): Buffer | null {
   return key;
 }
 
+// Whether a stored value is in the sealed form this module writes.
+export function isSealed(stored: string): boolean {
+  return stored.startsWith(PREFIX);
+}
+
 export function sealToken(plain: string): string {
   const key = keyFromEnv();
   if (!key) return plain;

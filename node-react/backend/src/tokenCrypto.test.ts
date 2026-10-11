@@ -63,11 +63,14 @@ test("turning the key on seals the tokens that were stored before it", async () 
   const b = `u-${crypto.randomUUID()}`;
   linkStore.save({ userId: a, appId: "sideline", accessToken: "plain-at", refreshToken: "plain-rt", accessExpiresAt: null, scopes: [] });
   linkStore.save({ userId: b, appId: "sideline", accessToken: "plain-at-2", refreshToken: null, accessExpiresAt: null, scopes: [] });
+  // A token is opaque: one that merely starts like a sealed value is still plain.
+  const c = `u-${crypto.randomUUID()}`;
+  linkStore.save({ userId: c, appId: "sideline", accessToken: "enc:looks-sealed-but-is-not", refreshToken: null, accessExpiresAt: null, scopes: [] });
   expect(sealStoredTokens()).toBe(0); // no key: nothing to do
   expect(raw(a).access_token).toBe("plain-at");
 
   process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
-  expect(sealStoredTokens()).toBeGreaterThanOrEqual(2);
+  expect(sealStoredTokens()).toBeGreaterThanOrEqual(3);
   expect(raw(a).access_token).toStartWith("enc:v1:");
   expect(raw(a).refresh_token).toStartWith("enc:v1:");
   expect(raw(b).access_token).toStartWith("enc:v1:");
@@ -75,6 +78,8 @@ test("turning the key on seals the tokens that were stored before it", async () 
   // Still readable, and a second pass has nothing left to seal.
   expect(linkStore.get(a)).toMatchObject({ accessToken: "plain-at", refreshToken: "plain-rt" });
   expect(linkStore.get(b)?.accessToken).toBe("plain-at-2");
+  expect(raw(c).access_token).toStartWith("enc:v1:");
+  expect(linkStore.get(c)?.accessToken).toBe("enc:looks-sealed-but-is-not");
   expect(sealStoredTokens()).toBe(0);
 });
 

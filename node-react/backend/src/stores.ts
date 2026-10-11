@@ -6,7 +6,7 @@
 
 import { db } from "./db";
 import { serializeDetail, type ActivityDetail } from "./activityDetail";
-import { openToken, sealToken } from "./tokenCrypto";
+import { isSealed, openToken, sealToken } from "./tokenCrypto";
 
 // ---- User store (the mock ISV-app user + their own wallet) -----------------
 
@@ -450,14 +450,13 @@ export const flowStore: FlowStore = {
 // does nothing. Returns how many links were rewritten.
 export function sealStoredTokens(): number {
   if (sealToken("probe") === "probe") return 0;
-  const SEALED = "enc:";
   const rows = db
     .query(`SELECT user_id, access_token, refresh_token FROM account_links`)
     .all() as { user_id: string; access_token: string; refresh_token: string | null }[];
   let sealed = 0;
   for (const row of rows) {
-    const plainAccess = !row.access_token.startsWith(SEALED);
-    const plainRefresh = row.refresh_token !== null && !row.refresh_token.startsWith(SEALED);
+    const plainAccess = !isSealed(row.access_token);
+    const plainRefresh = row.refresh_token !== null && !isSealed(row.refresh_token);
     if (!plainAccess && !plainRefresh) continue;
     db.query(`UPDATE account_links SET access_token = $a, refresh_token = $r WHERE user_id = $u`).run({
       $a: plainAccess ? sealToken(row.access_token) : row.access_token,
