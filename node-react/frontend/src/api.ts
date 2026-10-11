@@ -54,7 +54,9 @@ export class ApiError extends Error {
     // The app's own errors carry a sentence for the person (`message`) next to
     // the code; STX's forwarded rejections carry only the reason as `error`.
     const msg = body && typeof body === "object" ? (body as Record<string, unknown>).message : null;
-    if (typeof msg === "string" && msg) return msg;
+    // Only for requests the person can do something about: a server fault
+    // (5xx) may carry internal detail, so it shows its code instead.
+    if (typeof msg === "string" && msg && status < 500) return msg;
     if (code) return code;
     return `API error ${status}`;
   }
