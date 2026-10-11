@@ -613,7 +613,13 @@ async function verifyLink(app: AppProfile, user: User): Promise<void> {
 // Best-effort revoke the STX grant at STX, drop the local link and close the
 // user's live feed. Safe to call when the user has no link.
 export async function revokeAndDropLink(app: AppProfile, user: User): Promise<void> {
-  if (!linkStore.get(user.id)) return;
+  if (!linkStore.get(user.id)) {
+    // No readable link. One stored under an encryption key this deployment no
+    // longer has reads as no link; drop that row too, so it cannot come back
+    // if the key does.
+    linkStore.delete(user.id);
+    return;
+  }
   // The SDK revokes the refresh token (which kills the pair) and deletes the
   // link whether or not STX answered.
   const { oauth, tokens } = stxApp(app);

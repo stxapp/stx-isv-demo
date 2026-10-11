@@ -40,6 +40,19 @@ test("a link sealed under a key that is gone reads as not linked instead of fail
   // The key is replaced: the stored tokens can no longer be read.
   process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
   expect(linkStore.get(link.userId)).toBeNull();
+  // Unlinking still removes it, so it cannot come back if the old key does.
+  const { apiRoutes } = await import("./routes/api");
+  const { userStore } = await import("./stores");
+  const sid = "unreadablelinksession";
+  const user = userStore.ensure({ sessionId: sid, appId: "sideline", name: "A", startingWalletCents: 1 });
+  linkStore.save({ ...link, userId: user.id });
+  process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+  expect(linkStore.get(user.id)).toBeNull();
+  const res = await apiRoutes.request("/unlink", { method: "POST", headers: { cookie: `isv_sid=${sid}` } });
+  expect(res.status).toBe(200);
+  const { db } = await import("./db");
+  expect(db.query(`SELECT count(*) AS n FROM account_links WHERE user_id = $u`).get({ $u: user.id })).toEqual({ n: 0 });
+
   // Linking again writes a readable row.
   linkStore.save({ ...link, accessToken: "at2" });
   expect(linkStore.get(link.userId)?.accessToken).toBe("at2");

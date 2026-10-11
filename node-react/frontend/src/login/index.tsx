@@ -71,7 +71,7 @@ export function linkCopy(login: LoginInfo, appName: string): { label: string; hi
     };
   }
   return {
-    label: "Link your STX account",
+    label: "Connect your STX account",
     hint: `Trade on STX from ${appName}. You'll sign in to STX and approve access.`,
   };
 }

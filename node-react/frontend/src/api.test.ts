@@ -23,6 +23,10 @@ describe("what the person is told when a call fails", () => {
     expect(ApiError.describe(401, null)).toBe("Your STX account isn’t connected.");
   });
 
+  test("a server fault shows its code, not its detail", () => {
+    expect(ApiError.describe(500, { error: "internal_error", message: "Error: something internal at stores.ts:12" })).toBe("internal_error");
+  });
+
   test("with nothing to go on, the status", () => {
     expect(ApiError.describe(500, null)).toBe("API error 500");
   });

@@ -18,7 +18,7 @@ import { connectHints, finishLink } from "./shared";
 
 export interface LinkOptions {
   // True when the app has a real login: linking then needs a signed-in user.
-  // False for the mock login, where a visitor who taps "Link your STX account"
+  // False for the mock login, where a visitor who taps "Connect your STX account"
   // first gets the demo user the mock sign-in would have made.
   requireSignedIn: boolean;
 }
