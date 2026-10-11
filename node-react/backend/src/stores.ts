@@ -442,6 +442,36 @@ export const flowStore: FlowStore = {
   },
 };
 
+// ---- Tokens stored before encryption was turned on -------------------------
+//
+// Turning TOKEN_ENCRYPTION_KEY on does not by itself touch rows written before
+// it. On start, any token still stored as it was is rewritten sealed, so
+// nothing stays readable in the database or its backups. Without a key this
+// does nothing. Returns how many links were rewritten.
+export function sealStoredTokens(): number {
+  if (sealToken("probe") === "probe") return 0;
+  const SEALED = "enc:";
+  const rows = db
+    .query(`SELECT user_id, access_token, refresh_token FROM account_links`)
+    .all() as { user_id: string; access_token: string; refresh_token: string | null }[];
+  let sealed = 0;
+  for (const row of rows) {
+    const plainAccess = !row.access_token.startsWith(SEALED);
+    const plainRefresh = row.refresh_token !== null && !row.refresh_token.startsWith(SEALED);
+    if (!plainAccess && !plainRefresh) continue;
+    db.query(`UPDATE account_links SET access_token = $a, refresh_token = $r WHERE user_id = $u`).run({
+      $a: plainAccess ? sealToken(row.access_token) : row.access_token,
+      $r: plainRefresh ? sealToken(row.refresh_token as string) : row.refresh_token,
+      $u: row.user_id,
+    });
+    sealed++;
+  }
+  if (sealed > 0) console.log(`Sealed the stored STX tokens of ${sealed} link(s).`);
+  return sealed;
+}
+
+sealStoredTokens();
+
 // ---- Sign-ins in progress (`stx` and `vendor` login modes) -------------------
 
 // What is kept between sending the browser away to sign in and its return:

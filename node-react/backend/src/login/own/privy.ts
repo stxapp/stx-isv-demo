@@ -13,7 +13,7 @@ import { Hono } from "hono";
 import { config } from "../../config";
 import { publicUser } from "../../helpers";
 import { getOrCreateSession, startSession } from "../../session";
-import { revokeAndDropLink } from "../../routes/api";
+import { endLiveStreams, retireMockUser } from "../shared";
 import { userStore } from "../../stores";
 
 export interface PrivyIdentity {
@@ -78,11 +78,8 @@ export function privyLoginRoutes(): Hono {
     } catch {
       return c.json({ error: "invalid_privy_token", message: "Your sign-in could not be verified. Sign in again." }, 401);
     }
-    // A mock user on this browser is about to be replaced (see signInExternal).
-    // End its STX link properly first: revoke at STX and close its live feed.
     const sessionId = getOrCreateSession(c);
-    const here = userStore.find(sessionId, app.id);
-    if (here && !here.externalId) await revokeAndDropLink(app, here);
+    await retireMockUser(app, sessionId);
     const signedIn = userStore.signInExternal({
       sessionId,
       appId: app.id,
@@ -93,6 +90,7 @@ export function privyLoginRoutes(): Hono {
     });
     // Signed in: from here on the browser uses a session id made just now.
     const user = userStore.moveToSession(signedIn.id, startSession(c));
+    await endLiveStreams(app, user.id);
     return c.json({
       user: publicUser(user),
       connectHint: { connection: who.connection ?? null, loginHint: who.email ?? null },

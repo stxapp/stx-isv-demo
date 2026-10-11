@@ -3,7 +3,10 @@
 // pass to STX's sign-in.
 
 import type { Context } from "hono";
-import { config } from "../config";
+import { config, type AppProfile } from "../config";
+import { closeLiveFeed } from "../liveProxy";
+import { revokeAndDropLink } from "../routes/api";
+import { userStore } from "../stores";
 
 // End a trip to STX or to a login service. The trip runs in a POPUP on wide
 // screens (see the frontend's startLink), so instead of a 302 this returns a
@@ -73,6 +76,23 @@ export function forScript(value: unknown): string {
 // exchange or login service can never land someone on another person's user.
 export function identityKey(kind: "stx" | "vendor", issuer: string, sub: string): string {
   return `${kind}:${issuer.replace(/\/+$/, "")}|${sub}`;
+}
+
+// Before someone signs in on a browser that holds a mock user: that user is
+// about to be replaced (see userStore.signInExternal), so end its STX link
+// properly first: revoke at STX and close its live feed.
+export async function retireMockUser(app: AppProfile, sessionId: string): Promise<void> {
+  const here = userStore.find(sessionId, app.id);
+  if (here && !here.externalId) await revokeAndDropLink(app, here);
+}
+
+// After a user is signed in on this browser, or signed out of it: end every
+// live stream already open for them. A stream is tied to the user it was
+// opened for, not to a cookie, so one opened from a browser that no longer
+// holds them would otherwise keep receiving their account. This browser's own
+// stream simply reconnects.
+export async function endLiveStreams(app: AppProfile, userId: string): Promise<void> {
+  await closeLiveFeed(app, userId);
 }
 
 // Hints from the app's own login for STX's sign-in: `connection` goes straight

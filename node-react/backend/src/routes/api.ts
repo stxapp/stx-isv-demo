@@ -128,6 +128,8 @@ apiRoutes.post("/signout", async (c) => {
     const user = userStore.find(sid, app.id);
     if (user?.externalId) {
       userStore.detachSession(sid, app.id);
+      // Nothing keeps streaming their account to a browser they signed out of.
+      await closeLiveFeed(app, user.id);
     } else if (user) {
       await revokeAndDropLink(app, user);
       userStore.remove(sid, app.id);

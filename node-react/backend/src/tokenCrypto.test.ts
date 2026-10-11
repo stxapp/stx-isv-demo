@@ -45,6 +45,39 @@ test("a link sealed under a key that is gone reads as not linked instead of fail
   expect(linkStore.get(link.userId)?.accessToken).toBe("at2");
 });
 
+test("turning the key on seals the tokens that were stored before it", async () => {
+  process.env.STX_BASE_URL ??= "https://stx.example.com";
+  process.env.CLIENT_ID ??= "sideline-test-client-id";
+  process.env.CLIENT_SECRET ??= "sideline-test-client-secret";
+  process.env.DB_PATH ??= ":memory:";
+  const { linkStore, sealStoredTokens } = await import("./stores");
+  const { db } = await import("./db");
+  const raw = (id: string) =>
+    db.query(`SELECT access_token, refresh_token FROM account_links WHERE user_id = $u`).get({ $u: id }) as {
+      access_token: string;
+      refresh_token: string | null;
+    };
+
+  // Stored with no key: as they are.
+  const a = `u-${crypto.randomUUID()}`;
+  const b = `u-${crypto.randomUUID()}`;
+  linkStore.save({ userId: a, appId: "sideline", accessToken: "plain-at", refreshToken: "plain-rt", accessExpiresAt: null, scopes: [] });
+  linkStore.save({ userId: b, appId: "sideline", accessToken: "plain-at-2", refreshToken: null, accessExpiresAt: null, scopes: [] });
+  expect(sealStoredTokens()).toBe(0); // no key: nothing to do
+  expect(raw(a).access_token).toBe("plain-at");
+
+  process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+  expect(sealStoredTokens()).toBeGreaterThanOrEqual(2);
+  expect(raw(a).access_token).toStartWith("enc:v1:");
+  expect(raw(a).refresh_token).toStartWith("enc:v1:");
+  expect(raw(b).access_token).toStartWith("enc:v1:");
+  expect(raw(b).refresh_token).toBeNull();
+  // Still readable, and a second pass has nothing left to seal.
+  expect(linkStore.get(a)).toMatchObject({ accessToken: "plain-at", refreshToken: "plain-rt" });
+  expect(linkStore.get(b)?.accessToken).toBe("plain-at-2");
+  expect(sealStoredTokens()).toBe(0);
+});
+
 test("without a key, tokens pass through and old plain rows still read", () => {
   expect(sealToken("plain")).toBe("plain");
   process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");

@@ -7,6 +7,7 @@ import { config } from "../../config";
 import { publicUser } from "../../helpers";
 import { getOrCreateSession, startSession } from "../../session";
 import { userStore } from "../../stores";
+import { endLiveStreams } from "../shared";
 
 export function mockLoginRoutes(): Hono {
   const routes = new Hono();
@@ -25,6 +26,7 @@ export function mockLoginRoutes(): Hono {
     });
     // Signed in: from here on the browser uses a session id made just now.
     const user = userStore.moveToSession(signedIn.id, startSession(c));
+    await endLiveStreams(app, user.id);
     return c.json({ user: publicUser(user) });
   });
 

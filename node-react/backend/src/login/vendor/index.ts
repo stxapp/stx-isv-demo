@@ -26,7 +26,7 @@ import { config } from "../../config";
 import { getOrCreateSession, getSession, startSession } from "../../session";
 import { linkStore, SIGN_IN_FLOW_TTL_MS, signInFlowStore, userStore } from "../../stores";
 import { linkRoutes } from "../link";
-import { finishLink, identityKey } from "../shared";
+import { endLiveStreams, finishLink, identityKey, retireMockUser } from "../shared";
 import { displayName } from "../stx";
 
 let discovered: Promise<oidc.Configuration> | null = null;
@@ -140,6 +140,7 @@ export function vendorLoginRoutes(): Hono {
     if (!claims?.sub) return finishLink(c, "error=sign_in_failed");
     const email = typeof claims.email === "string" ? claims.email : undefined;
     const app = config.app;
+    await retireMockUser(app, flow.sessionId);
     const signedIn = userStore.signInExternal({
       sessionId: flow.sessionId,
       appId: app.id,
@@ -150,6 +151,7 @@ export function vendorLoginRoutes(): Hono {
     });
     // Signed in: from here on the browser uses a session id made just now.
     const user = userStore.moveToSession(signedIn.id, startSession(c));
+    await endLiveStreams(app, user.id);
     // The service's own tokens are not kept: the app needs only who this is.
 
     // Signed in. A user with an STX link is done; one without goes straight on

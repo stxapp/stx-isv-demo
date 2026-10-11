@@ -294,6 +294,37 @@ describe("login mode stx", () => {
     }
   });
 
+  test("a mock user left on the browser is retired, and its STX link revoked, before the member is signed in", async () => {
+    // A mock user with a link, as an earlier own-mode deployment would have left.
+    const started = await start();
+    const sid = sidOf(started.cookie);
+    const mock = userStore.ensure({ sessionId: sid, appId: config.app.id, name: "Earlier visitor", startingWalletCents: 1 });
+    linkStore.save({ userId: mock.id, appId: config.app.id, accessToken: "their-at", refreshToken: "their-rt", accessExpiresAt: null, scopes: [] });
+
+    // The link's revoke goes to the exchange in STX_BASE_URL; everything else is the mock.
+    const revoked: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input) === "https://stx.example.com/oauth/revoke") {
+        revoked.push(new URLSearchParams(String(init?.body)).get("token") ?? "");
+        return new Response("", { status: 200 });
+      }
+      return realFetch(input as string, init);
+    }) as unknown as typeof fetch;
+    try {
+      stx.member = { sub: "member-after-mock", email: "after@example.com" };
+      const res = await app.request(await throughStx(started.authorize), { headers: { cookie: started.cookie } });
+      const user = userStore.find(sidOf(cookieFrom(res)), config.app.id)!;
+      expect(user.id).not.toBe(mock.id);
+      expect(linkStore.get(user.id)?.accessToken).toStartWith("mock_at_");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(revoked).toEqual(["their-rt"]);
+    expect(userStore.get(mock.id)).toBeNull();
+    expect(linkStore.get(mock.id)).toBeNull();
+  });
+
   test("a different member on the same browser gets their own account", async () => {
     const a = await signIn({ sub: "member-a", email: "a@example.com" });
     const first = userStore.find(a.sid, config.app.id)!;

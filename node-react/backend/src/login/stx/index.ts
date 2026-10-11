@@ -27,7 +27,7 @@ import { config } from "../../config";
 import { getOrCreateSession, getSession, startSession } from "../../session";
 import { activityStore, SIGN_IN_FLOW_TTL_MS, signInFlowStore, userStore } from "../../stores";
 import { stxApp } from "../../stx";
-import { connectHints, finishLink, identityKey } from "../shared";
+import { connectHints, endLiveStreams, finishLink, identityKey, retireMockUser } from "../shared";
 
 let connect: Connect | null = null;
 
@@ -105,6 +105,7 @@ export function stxLoginRoutes(): Hono {
 
     const { identity, tokens } = finished;
     const app = config.app;
+    await retireMockUser(app, flow.sessionId);
     const signedIn = userStore.signInExternal({
       sessionId: flow.sessionId,
       appId: app.id,
@@ -117,6 +118,7 @@ export function stxLoginRoutes(): Hono {
     });
     // Signed in: from here on the browser uses a session id made just now.
     const user = userStore.moveToSession(signedIn.id, startSession(c));
+    await endLiveStreams(app, user.id);
     await stxApp(app).tokens.set(user.id, {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
