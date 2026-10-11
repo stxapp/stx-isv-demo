@@ -1,31 +1,45 @@
-import { PrivyProvider } from "@privy-io/react-auth";
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { api } from "./api";
+import { api, setLinkStartPath, type AppResponse } from "./api";
 import { App } from "./App";
-import { PrivyBridge } from "./components/PrivySignIn";
+import { setLinkCopy } from "./components/LinkStx";
+import { DEFAULT_LOGIN, linkCopy, linkPath, LoginProvider, retryDelayMs } from "./login";
 import "./styles.css";
 
-// With a Privy App ID from the backend, the app's own login is Privy; without
-// one, the mock sign-in. Read at runtime, so no rebuild switches it.
+// The backend says how people get into this deployment (LOGIN_MODE). Read at
+// runtime, so one build serves every mode and no rebuild switches it.
 function Root() {
-  const [privyAppId, setPrivyAppId] = useState<string | null | undefined>(undefined);
+  const [boot, setBoot] = useState<AppResponse | undefined>(undefined);
   useEffect(() => {
-    api
-      .app()
-      .then((r) => setPrivyAppId(r.privyAppId ?? null))
-      .catch(() => setPrivyAppId(null));
+    let stopped = false;
+    // The mode decides which sign-in is drawn and where linking starts, so it
+    // is never guessed: if the backend cannot be reached, keep asking.
+    (async () => {
+      for (let attempt = 0; !stopped; attempt++) {
+        try {
+          const res = await api.app();
+          if (stopped) return;
+          const l = res.login ?? DEFAULT_LOGIN;
+          setLinkStartPath(linkPath(l));
+          setLinkCopy((appName) => linkCopy(l, appName));
+          // Kept whole: App draws from this answer instead of asking again.
+          setBoot(res);
+          return;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs(attempt)));
+        }
+      }
+    })();
+    return () => {
+      stopped = true;
+    };
   }, []);
-  if (privyAppId === undefined) return null;
-  if (!privyAppId) return <App privy={false} />;
+  if (boot === undefined) return <p className="muted boot-wait">Loading…</p>;
+  const login = boot.login ?? DEFAULT_LOGIN;
   return (
-    <PrivyProvider
-      appId={privyAppId}
-      config={{ loginMethods: ["email", "google", "twitter"], appearance: { theme: "dark" } }}
-    >
-      <PrivyBridge />
-      <App privy />
-    </PrivyProvider>
+    <LoginProvider login={login}>
+      <App login={login} boot={boot} />
+    </LoginProvider>
   );
 }
 

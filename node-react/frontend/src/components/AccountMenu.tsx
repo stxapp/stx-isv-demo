@@ -110,6 +110,7 @@ export function AccountMenu({
             <Avatar name={user.name} size="lg" />
             <div className="account-who-text">
               <span className="account-who-name">{user.name}</span>
+              {user.email && user.email !== user.name && <span className="muted">{user.email}</span>}
               <span className="muted">Signed in to {app.name}</span>
             </div>
           </div>

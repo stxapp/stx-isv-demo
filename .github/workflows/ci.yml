@@ -1,12 +1,23 @@
 name: CI
 
+# Proves the code works in every login mode, and keeps proving it: on every
+# push and pull request, and once a day so a drifting dependency is noticed.
+# Nothing here needs a secret or a network service: STX, the login service and
+# the person logging in are local stand-ins (node-react/backend/test-support).
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -24,7 +35,7 @@ jobs:
       - name: Backend typecheck
         working-directory: node-react/backend
         run: bunx tsc --noEmit
-      - name: Backend tests
+      - name: Backend unit tests (every login mode's routes)
         working-directory: node-react/backend
         run: bun test
       - name: Frontend dependencies
@@ -33,9 +44,77 @@ jobs:
       - name: Frontend typecheck
         working-directory: node-react/frontend
         run: bunx tsc --noEmit
-      - name: Frontend tests
+      - name: Frontend unit tests
         working-directory: node-react/frontend
         run: bun test
       - name: Frontend build
         working-directory: node-react/frontend
+        env:
+          VITE_BACKEND_URL: ""
         run: bun run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: node-react/frontend/dist
+          retention-days: 1
+
+  e2e:
+    name: End to end, login mode ${{ matrix.mode }}
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [own-mock, own-privy, stx, vendor]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Backend dependencies
+        working-directory: node-react/backend
+        run: bun install
+      # The backend serves the built page from ./public, as the image does.
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: node-react/backend/public
+      # Starts the real backend in this mode and walks every route. STX, the
+      # login service and the person logging in are mocked; see the script.
+      - name: Run every route in login mode ${{ matrix.mode }}
+        working-directory: node-react/backend
+        env:
+          E2E_EXPECT_FRONTEND: "1"
+        run: bun run e2e/run.ts ${{ matrix.mode }}
+
+  image:
+    name: Container image builds and starts in each mode
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the single-container image
+        run: docker build -t stx-demo-app node-react
+      - name: The image starts in each login mode
+        run: |
+          set -euo pipefail
+          run() {
+            name="$1"; shift
+            docker run -d --name "$name" -p 8787:8787 \
+              -e STX_BASE_URL=https://stx.example.com -e CLIENT_ID=ci -e CLIENT_SECRET=ci \
+              -e PUBLIC_URL=http://localhost:8787 "$@" stx-demo-app >/dev/null
+            for i in $(seq 1 30); do
+              if out=$(curl -fsS http://localhost:8787/health 2>/dev/null); then break; fi
+              sleep 1
+            done
+            echo "$name: ${out:-no answer}"
+            docker logs "$name" 2>&1 | tail -5
+            docker rm -f "$name" >/dev/null
+            echo "${out:-}" | grep -q "\"loginMode\":\"$name\""
+          }
+          run own -e LOGIN_MODE=own
+          run stx -e LOGIN_MODE=stx
+          run vendor -e LOGIN_MODE=vendor -e VENDOR_ISSUER=https://login.example.com \
+            -e VENDOR_CLIENT_ID=ci -e VENDOR_CLIENT_SECRET=ci

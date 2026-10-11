@@ -22,12 +22,13 @@
 
 import { Database } from "bun:sqlite";
 import { dirname } from "node:path";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { config } from "./config";
 
 // Ensure the directory for the SQLite file exists (e.g. the mounted ./data).
-// An in-memory database (":memory:") has no directory.
-if (config.dbPath !== ":memory:") {
+// An in-memory database (":memory:") has no directory. The directory is only
+// made when absent: some Bun 1.1 builds fail a recursive mkdir of one that exists.
+if (config.dbPath !== ":memory:" && !existsSync(dirname(config.dbPath))) {
   mkdirSync(dirname(config.dbPath), { recursive: true });
 }
 
@@ -114,12 +115,42 @@ addColumnIfMissing("activity", "sdk_call", "TEXT");
 // the ISV user it was made for; both null on older rows and app-level calls.
 addColumnIfMissing("activity", "detail", "TEXT");
 addColumnIfMissing("activity", "user_id", "TEXT");
-// The user's id in the app's own login (Privy), when there is one. A returning
-// user is found by it from any browser, with their wallet and STX link.
+// Who the user is in whatever signed them in (see User.externalId), when there
+// is an account behind them. A returning user is found by it from any browser,
+// with their wallet and STX link.
 addColumnIfMissing("users", "external_id", "TEXT");
+addColumnIfMissing("users", "email", "TEXT");
+// Sign-ins in progress for the `stx` and `vendor` login modes (see stores.ts).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS signin_flows (
+    state          TEXT PRIMARY KEY,
+    code_verifier  TEXT NOT NULL,
+    nonce          TEXT NOT NULL,
+    session_id     TEXT NOT NULL,
+    created_at     INTEGER NOT NULL
+  );
+`);
 db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS users_app_external ON users (app_id, external_id) WHERE external_id IS NOT NULL`,
 );
+
+// ---- Users from a Playbook database ------------------------------------------
+//
+// Playbook, before it became the `stx` login mode here, kept the member's STX
+// id in its own column (`stx_sub`). A database from then is carried over: those
+// users get the key the `stx` mode looks them up by, so they keep their wallet
+// and STX link. A database that never had the column is left alone.
+export function adoptPlaybookUsers(issuer: string): number {
+  const columns = db.query(`PRAGMA table_info(users)`).all() as { name: string }[];
+  if (!columns.some((c) => c.name === "stx_sub")) return 0;
+  const { changes } = db
+    .query(`UPDATE users SET external_id = $prefix || stx_sub WHERE stx_sub IS NOT NULL AND external_id IS NULL`)
+    .run({ $prefix: `stx:${issuer.replace(/\/+$/, "")}|` });
+  if (changes > 0) console.log(`Carried over ${changes} Playbook user(s).`);
+  return changes;
+}
+
+adoptPlaybookUsers(config.stxLogin.issuer);
 
 // ---- Re-home rows after an app is renamed -----------------------------------
 //

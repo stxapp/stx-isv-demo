@@ -1,4 +1,4 @@
-// Link to this sample app's public source. The GitHub mark is inline SVG (no
+// Link to this demo app's public source. The GitHub mark is inline SVG (no
 // icon dependency, no external image host) and takes the current text colour,
 // so it follows the light and dark themes.
 import { track } from "../analytics";

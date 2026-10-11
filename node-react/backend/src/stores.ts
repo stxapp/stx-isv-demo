@@ -6,6 +6,7 @@
 
 import { db } from "./db";
 import { serializeDetail, type ActivityDetail } from "./activityDetail";
+import { isSealed, openToken, sealToken } from "./tokenCrypto";
 
 // ---- User store (the mock ISV-app user + their own wallet) -----------------
 
@@ -19,8 +20,13 @@ export interface User {
   name: string;
   walletCents: number;
   createdAt: number;
-  // The user's id in the app's own login (Privy), or null for the mock sign-in.
+  // Who the user is in whatever signed them in: the Privy user id (`own` mode),
+  // or the issuer and its subject for them (`stx` and `vendor` modes, see
+  // login/shared.ts identityKey). Null
+  // for the mock sign-in, which has no account behind it.
   externalId: string | null;
+  // Their email, when the login gave one.
+  email: string | null;
 }
 
 export interface UserStore {
@@ -34,7 +40,7 @@ export interface UserStore {
   }): User;
   get(userId: string): User | null;
   find(sessionId: string, appId: string): User | null;
-  // Sign in a user of the app's own login (externalId: the Privy user id) on
+  // Sign in a user who has an account behind them (externalId, see User) on
   // this browser session. A returning user gets their existing row (wallet and
   // STX link), moved to this session; a first sign-in creates the user. A mock
   // user already on the session is removed, never taken over.
@@ -43,8 +49,12 @@ export interface UserStore {
     appId: string;
     externalId: string;
     name: string;
+    email?: string | null;
     startingWalletCents: number;
   }): User;
+  // Move a just-signed-in user to a fresh session id (see session.ts
+  // startSession), leaving nothing on the id they signed in under.
+  moveToSession(userId: string, sessionId: string): User;
   // Detach the user from this browser session without deleting them, so the
   // next sign-in (any browser) finds their wallet and STX link again.
   detachSession(sessionId: string, appId: string): void;
@@ -130,6 +140,9 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
+// Marks the session id of a user no browser holds. Never valid in a cookie.
+export const DETACHED_PREFIX = "detached:";
+
 export const userStore: UserStore = {
   ensure({ sessionId, appId, name, startingWalletCents }) {
     const existing = this.find(sessionId, appId);
@@ -143,6 +156,7 @@ export const userStore: UserStore = {
       walletCents: startingWalletCents,
       createdAt: Date.now(),
       externalId: null,
+      email: null,
     };
     db.query(
       `INSERT INTO users (id, session_id, app_id, name, wallet_cents, created_at)
@@ -172,7 +186,7 @@ export const userStore: UserStore = {
     return row ? rowToUser(row) : null;
   },
 
-  signInExternal({ sessionId, appId, externalId, name, startingWalletCents }) {
+  signInExternal({ sessionId, appId, externalId, name, email = null, startingWalletCents }) {
     const returning = db
       .query(`SELECT * FROM users WHERE app_id = $app AND external_id = $ext`)
       .get({ $app: appId, $ext: externalId }) as UserRow | null;
@@ -187,7 +201,13 @@ export const userStore: UserStore = {
           this.remove(sessionId, appId);
         }
       }
-      db.query(`UPDATE users SET session_id = $sid WHERE id = $id`).run({ $sid: sessionId, $id: returning.id });
+      // Their name and email follow what the login says now.
+      db.query(`UPDATE users SET session_id = $sid, name = $name, email = COALESCE($email, email) WHERE id = $id`).run({
+        $sid: sessionId,
+        $name: name,
+        $email: email,
+        $id: returning.id,
+      });
       return this.get(returning.id) as User;
     }
     // A first sign-in never takes over whoever was on this browser before. A
@@ -201,8 +221,17 @@ export const userStore: UserStore = {
       this.detachSession(sessionId, appId);
     }
     const user = this.ensure({ sessionId, appId, name, startingWalletCents });
-    db.query(`UPDATE users SET external_id = $ext WHERE id = $id`).run({ $ext: externalId, $id: user.id });
+    db.query(`UPDATE users SET external_id = $ext, email = $email WHERE id = $id`).run({
+      $ext: externalId,
+      $email: email,
+      $id: user.id,
+    });
     return this.get(user.id) as User;
+  },
+
+  moveToSession(userId, sessionId) {
+    db.query(`UPDATE users SET session_id = $sid WHERE id = $id`).run({ $sid: sessionId, $id: userId });
+    return this.get(userId) as User;
   },
 
   detachSession(sessionId, appId) {
@@ -211,7 +240,7 @@ export const userStore: UserStore = {
     // placeholder is random, never derived from the user id (which the browser
     // knows), and session.ts refuses any cookie that looks like one.
     db.query(`UPDATE users SET session_id = $placeholder WHERE session_id = $sid AND app_id = $app`).run({
-      $placeholder: `detached:${crypto.randomUUID()}${crypto.randomUUID()}`,
+      $placeholder: `${DETACHED_PREFIX}${crypto.randomUUID()}${crypto.randomUUID()}`,
       $sid: sessionId,
       $app: appId,
     });
@@ -241,6 +270,7 @@ interface UserRow {
   wallet_cents: number;
   created_at: number;
   external_id: string | null;
+  email: string | null;
 }
 
 function rowToUser(row: UserRow): User {
@@ -252,6 +282,7 @@ function rowToUser(row: UserRow): User {
     walletCents: row.wallet_cents,
     createdAt: row.created_at,
     externalId: row.external_id ?? null,
+    email: row.email ?? null,
   };
 }
 
@@ -272,8 +303,8 @@ export const linkStore: LinkStore = {
     ).run({
       $uid: link.userId,
       $app: link.appId,
-      $access: link.accessToken,
-      $refresh: link.refreshToken,
+      $access: sealToken(link.accessToken),
+      $refresh: link.refreshToken === null ? null : sealToken(link.refreshToken),
       $exp: link.accessExpiresAt,
       $scopes: link.scopes.join(" "),
       // Preserve the original linkedAt on update; set it on first insert.
@@ -301,11 +332,23 @@ export const linkStore: LinkStore = {
       | null;
 
     if (!row) return null;
+    // Tokens sealed under a key this deployment no longer has cannot be read.
+    // That user reads as not linked and can link again; the row is left in
+    // place in case the key comes back.
+    let accessToken: string;
+    let refreshToken: string | null;
+    try {
+      accessToken = openToken(row.access_token);
+      refreshToken = row.refresh_token === null ? null : openToken(row.refresh_token);
+    } catch {
+      console.error(`The STX link of user ${userId} cannot be read: check TOKEN_ENCRYPTION_KEY.`);
+      return null;
+    }
     return {
       userId: row.user_id,
       appId: row.app_id,
-      accessToken: row.access_token,
-      refreshToken: row.refresh_token,
+      accessToken,
+      refreshToken,
       accessExpiresAt: row.access_expires_at,
       scopes: row.scopes ? row.scopes.split(" ").filter(Boolean) : [],
       linkedAt: row.linked_at,
@@ -396,5 +439,70 @@ export const flowStore: FlowStore = {
       appId: row.app_id,
       userId: row.user_id,
     };
+  },
+};
+
+// ---- Tokens stored before encryption was turned on -------------------------
+//
+// Turning TOKEN_ENCRYPTION_KEY on does not by itself touch rows written before
+// it. On start, any token still stored as it was is rewritten sealed, so
+// nothing stays readable in the database or its backups. Without a key this
+// does nothing. Returns how many links were rewritten.
+export function sealStoredTokens(): number {
+  if (sealToken("probe") === "probe") return 0;
+  const rows = db
+    .query(`SELECT user_id, access_token, refresh_token FROM account_links`)
+    .all() as { user_id: string; access_token: string; refresh_token: string | null }[];
+  let sealed = 0;
+  for (const row of rows) {
+    const plainAccess = !isSealed(row.access_token);
+    const plainRefresh = row.refresh_token !== null && !isSealed(row.refresh_token);
+    if (!plainAccess && !plainRefresh) continue;
+    db.query(`UPDATE account_links SET access_token = $a, refresh_token = $r WHERE user_id = $u`).run({
+      $a: plainAccess ? sealToken(row.access_token) : row.access_token,
+      $r: plainRefresh ? sealToken(row.refresh_token as string) : row.refresh_token,
+      $u: row.user_id,
+    });
+    sealed++;
+  }
+  if (sealed > 0) console.log(`Sealed the stored STX tokens of ${sealed} link(s).`);
+  return sealed;
+}
+
+sealStoredTokens();
+
+// ---- Sign-ins in progress (`stx` and `vendor` login modes) -------------------
+
+// What is kept between sending the browser away to sign in and its return:
+// the PKCE verifier, the nonce and the browser session that started it, keyed
+// by the one-time state. Bound to the session so a callback replayed in another
+// browser is refused (login CSRF).
+export interface SignInFlow {
+  codeVerifier: string;
+  nonce: string;
+  sessionId: string;
+  createdAt: number;
+}
+
+// A sign-in older than this is refused at the callback.
+export const SIGN_IN_FLOW_TTL_MS = 15 * 60 * 1000;
+
+export const signInFlowStore = {
+  save(state: string, flow: Omit<SignInFlow, "createdAt">): void {
+    db.query(`DELETE FROM signin_flows WHERE created_at < $cutoff`).run({ $cutoff: Date.now() - SIGN_IN_FLOW_TTL_MS });
+    db.query(
+      `INSERT INTO signin_flows (state, code_verifier, nonce, session_id, created_at)
+       VALUES ($state, $verifier, $nonce, $sid, $now)`,
+    ).run({ $state: state, $verifier: flow.codeVerifier, $nonce: flow.nonce, $sid: flow.sessionId, $now: Date.now() });
+  },
+
+  // Single use: the row is deleted as it is read.
+  take(state: string): SignInFlow | null {
+    const row = db
+      .query(`SELECT code_verifier, nonce, session_id, created_at FROM signin_flows WHERE state = $state`)
+      .get({ $state: state }) as { code_verifier: string; nonce: string; session_id: string; created_at: number } | null;
+    if (!row) return null;
+    db.query(`DELETE FROM signin_flows WHERE state = $state`).run({ $state: state });
+    return { codeVerifier: row.code_verifier, nonce: row.nonce, sessionId: row.session_id, createdAt: row.created_at };
   },
 };

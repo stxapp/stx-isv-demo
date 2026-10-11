@@ -13,8 +13,15 @@ function SidelineMark() {
   );
 }
 
+// Playbook: its registered icon (public/assets/brand/playbook-icon.svg, the same
+// file STX shows on its sign-in and consent screens), so a new icon is a one-file swap.
+function PlaybookMark() {
+  return <img className="isv-logo-mark" src="/assets/brand/playbook-icon.svg" alt="" aria-hidden="true" />;
+}
+
 const MARKS: Record<string, () => JSX.Element> = {
   sideline: SidelineMark,
+  playbook: PlaybookMark,
 };
 
 export function IsvLogo({ appId, name, brandColor }: { appId?: string; name: string; brandColor: string }) {
@@ -29,7 +36,7 @@ export function IsvLogo({ appId, name, brandColor }: { appId?: string; name: str
         </span>
       )}
       <span className="isv-name">{name}</span>
-      {/* Sideline is a sample app, said on every page so nobody takes it for a real product. */}
+      {/* Sideline is a demo app, said on every page so nobody takes it for a real product. */}
       <span className="demo-badge">Demo app</span>
     </span>
   );
