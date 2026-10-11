@@ -1,10 +1,11 @@
-# STX ISV demo: Sideline (a fictional sports app used to demonstrate building on
-# STX, not a real product) on a Bun/TS backend + Vite/React frontend.
+# STX sample app (a fictional sports app used to demonstrate building on STX,
+# not a real product) on a Bun/TS backend + Vite/React frontend.
 #
-#   cp .env.example .env   # fill in CLIENT_ID / CLIENT_SECRET / STX_BASE_URL
+#   cp .env.example .env   # pick LOGIN_MODE, fill in CLIENT_ID / CLIENT_SECRET / STX_BASE_URL
 #   docker compose up
 #
-# Then open http://localhost:5173, sign in to Sideline, and link your STX account.
+# Then open http://localhost:5173. How you sign in depends on LOGIN_MODE; see
+# "Login modes" in the README.
 
 services:
   backend:
@@ -15,7 +16,23 @@ services:
       PORT: 8787
       STX_BASE_URL: ${STX_BASE_URL}
 
-      # --- The app: Sideline (its OAuth client) ---
+      # --- How people get into the app (see "Login modes" in the README) ---
+      LOGIN_MODE: ${LOGIN_MODE:-own}
+      OWN_LOGIN: ${OWN_LOGIN:-}
+      PRIVY_APP_ID: ${PRIVY_APP_ID:-}
+      PRIVY_APP_SECRET: ${PRIVY_APP_SECRET:-}
+      STX_LOGIN_REDIRECT_URI: ${STX_LOGIN_REDIRECT_URI:-http://localhost:8787/auth/stx/callback}
+      VENDOR_NAME: ${VENDOR_NAME:-}
+      VENDOR_ISSUER: ${VENDOR_ISSUER:-}
+      VENDOR_CLIENT_ID: ${VENDOR_CLIENT_ID:-}
+      VENDOR_CLIENT_SECRET: ${VENDOR_CLIENT_SECRET:-}
+      VENDOR_REDIRECT_URI: ${VENDOR_REDIRECT_URI:-http://localhost:8787/auth/vendor/callback}
+      VENDOR_SCOPES: ${VENDOR_SCOPES:-}
+      VENDOR_AUTHORIZE_PARAMS: ${VENDOR_AUTHORIZE_PARAMS:-}
+      VENDOR_CLIENT_AUTH: ${VENDOR_CLIENT_AUTH:-}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+
+      # --- The app's STX client ---
       CLIENT_ID: ${CLIENT_ID}
       CLIENT_SECRET: ${CLIENT_SECRET}
       REDIRECT_URI: ${REDIRECT_URI}

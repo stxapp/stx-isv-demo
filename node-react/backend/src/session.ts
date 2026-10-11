@@ -26,9 +26,14 @@ function newSessionId(): string {
 
 // Returns the existing session id from the cookie, or mints one and sets it.
 export function getOrCreateSession(c: Context): string {
-  const existing = cookieSession(c);
-  if (existing) return existing;
+  return cookieSession(c) ?? startSession(c);
+}
 
+// Give this browser a brand-new session id. Called at the moment someone is
+// signed in, so the id in use after sign-in is never one that existed before
+// it: a cookie planted in the browser beforehand ends up signed in to nothing
+// (session fixation).
+export function startSession(c: Context): string {
   const sid = newSessionId();
   setCookie(c, COOKIE_NAME, sid, {
     httpOnly: true,

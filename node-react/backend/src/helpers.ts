@@ -2,6 +2,7 @@
 // request, and best-effort extraction of a cash amount from STX's balance body.
 
 import type { Context } from "hono";
+import type { User } from "./stores";
 import { getApp, type AppProfile } from "./config";
 
 // The active ISV app for a request. The frontend appends `?app=<id>` to every
@@ -66,4 +67,15 @@ export function extractStxCashCents(body: unknown, depth = 2): number | null {
 // Format cents as a plain dollar string, e.g. 25000 -> "250.00".
 export function centsToDollarString(cents: number): string {
   return (cents / 100).toFixed(2);
+}
+
+// Public-safe view of one of the app's users.
+export function publicUser(user: User) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    walletCents: user.walletCents,
+    walletDollars: centsToDollarString(user.walletCents),
+  };
 }

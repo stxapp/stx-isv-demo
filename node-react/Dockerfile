@@ -1,11 +1,11 @@
-# Single-container production image for the Sideline sample app.
+# Single-container production image for the STX sample app.
 #
 # Builds the Vite/React frontend to static assets, then runs the Bun backend
 # (the confidential OAuth client) which also serves those assets, so the whole
 # demo is one origin: cookies are same-site and the browser calls /api and
 # /login relatively. Nothing host-specific is baked in: the exchange's address,
-# this app's public URL and the OAuth config all come from runtime env, so one
-# image runs on any host.
+# this app's public URL, its name and its login mode (LOGIN_MODE) all come from
+# runtime env, so one image runs on any host, as any of the demo apps.
 
 # --- Stage 1: build the frontend ---
 FROM node:20-alpine AS frontend

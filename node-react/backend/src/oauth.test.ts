@@ -26,7 +26,8 @@ const { db } = await import("./db");
 const { activityStore, linkStore, userStore } = await import("./stores");
 const { memberClient, pendingStore, stxApp } = await import("./stx");
 const { apiRoutes } = await import("./routes/api");
-const { authRoutes } = await import("./routes/auth");
+const { linkRoutes } = await import("./login/link");
+const authRoutes = linkRoutes({ requireSignedIn: false });
 
 const sideline = config.app;
 
@@ -165,10 +166,16 @@ describe("authorize redirect", () => {
   });
 
   test("STX's ?error and a missing code are distinct callback errors", async () => {
-    await expect(readCallback(pendingStore, { error: "access_denied" })).rejects.toMatchObject({
+    // An error is believed only on a sign-in this app started: the state is checked first.
+    const { oauth } = stxApp(sideline);
+    const started = await oauth.beginAuthorization(pendingStore, { data: { sessionId: "s", appId: "sideline", userId: "u" } });
+    await expect(readCallback(pendingStore, { error: "access_denied", state: started.state })).rejects.toMatchObject({
       error: "access_denied",
     });
-    await expect(readCallback(pendingStore, { state: "x" })).rejects.toMatchObject({ error: "invalid_request" });
+    await expect(readCallback(pendingStore, { error: "access_denied", state: "never-issued" })).rejects.toMatchObject({
+      error: "invalid_state",
+    });
+    await expect(readCallback(pendingStore, { state: "x" })).rejects.toMatchObject({ error: expect.stringMatching(/invalid_(request|state)/) });
   });
 });
 
@@ -366,6 +373,19 @@ describe("a dead link reads as not linked", () => {
     expect((await me(sid, false)).link.connected).toBe(true); // the stored row alone says linked
     expect((await me(sid, true)).link.connected).toBe(false);
     expect(linkStore.get(uid)).toBeNull();
+  });
+
+  test("an STX account still being verified answers account_pending and keeps the link", async () => {
+    const { sid, uid } = linkedSession("stx_at_pending", "stx_rt_pending");
+    mockFetch((call) =>
+      call.url.endsWith("/oauth/token")
+        ? json(400, { error: "invalid_grant", error_reason: "account_pending" })
+        : json(401, { error: "invalid_token" }),
+    );
+    const res = await apiRoutes.request("/balance", { headers: { cookie: `isv_sid=${sid}` } });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe("account_pending");
+    expect(linkStore.get(uid)).not.toBeNull();
   });
 
   test("verify: a working link stays linked; an STX outage does not unlink", async () => {

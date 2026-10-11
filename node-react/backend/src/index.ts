@@ -1,9 +1,9 @@
-// Backend entry point: the confidential OAuth client for the STX ISV demo.
+// Backend entry point: the confidential client for the STX sample app.
 //
-// It presents as the ISV app Sideline (a fictional sports app used to
-// demonstrate building on STX), holds its client_secret and every STX token
-// server-side, brokers the OAuth account-linking flow, tracks the app's own
-// mock wallet, and proxies
+// It presents as one fictional sports app (Sideline, Playbook, ... by
+// configuration), holds its client_secret and every STX token server-side,
+// signs people in the way LOGIN_MODE says, tracks the app's own mock wallet,
+// and proxies
 // authenticated STX calls on behalf of the browser. Start with
 // `bun run src/index.ts` (or via Docker Compose).
 
@@ -11,8 +11,9 @@ import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { config } from "./config";
 import "./db"; // create tables on boot
+import { brandIndexHtml } from "./brand";
 import { apiRoutes, UnknownAppError } from "./routes/api";
-import { authRoutes } from "./routes/auth";
+import { LOGIN_PATHS, loginRoutes } from "./login";
 import { NotLinkedError } from "./stx";
 import { serveStatic } from "hono/bun";
 
@@ -28,24 +29,36 @@ app.use(
 );
 
 app.get("/health", (c) =>
-  c.json({ ok: true, stxBaseUrl: config.stxBaseUrl, stxPublicUrl: config.stxPublicUrl, publicUrl: config.publicUrl }),
+  c.json({ ok: true, loginMode: config.login.mode, stxBaseUrl: config.stxBaseUrl, stxPublicUrl: config.stxPublicUrl, publicUrl: config.publicUrl }),
 );
 
-// OAuth account-linking routes at the root: /login, /callback.
-app.route("/", authRoutes);
+// Signing in and linking an STX account: the routes of the configured login
+// mode (LOGIN_MODE), each mode in its own folder under ./login/.
+app.route("/", loginRoutes());
+for (const path of LOGIN_PATHS) {
+  app.all(path, (c) => c.json({ error: "not_in_this_login_mode", loginMode: config.login.mode }, 404));
+}
 
 // App/session/wallet + proxy routes under /api.
 app.route("/api", apiRoutes);
 
 // Serve the built frontend (single-origin production deploy). In local dev the
 // frontend runs on its own Vite server and ./public is absent, so these no-op.
-// The page itself is served with this app's public origin filled in (its share
-// card needs absolute URLs), so the same build works on any host.
+// The page itself is served with this deployment's origin, name and icons
+// filled in (see brand.ts), so the same build works on any host and as any app.
 async function indexHtml(c: Context) {
   const file = Bun.file("./public/index.html");
   if (!(await file.exists())) return c.notFound();
-  const origin = config.publicUrl || new URL(c.req.url).origin;
-  return c.html((await file.text()).replaceAll("__PUBLIC_URL__", origin));
+  const { id, name } = config.app;
+  return c.html(
+    brandIndexHtml(await file.text(), {
+      origin: config.publicUrl || new URL(c.req.url).origin,
+      appId: id,
+      appName: name,
+      hasIcon: await Bun.file(`./public/assets/brand/${id}-icon.svg`).exists(),
+      hasImages: await Bun.file(`./public/assets/brand/${id}/og-image.png`).exists(),
+    }),
+  );
 }
 app.get("/", indexHtml);
 app.get("/index.html", indexHtml);
@@ -65,7 +78,10 @@ app.onError((err, c) => {
   return c.json({ error: "internal_error", message: String(err) }, 500);
 });
 
-console.log(`ISV demo backend listening on :${config.port} -> STX ${config.stxBaseUrl} | app: ${config.app.id}`);
+const login = config.login.mode === "own" ? `own (${config.login.own})` : config.login.mode;
+console.log(
+  `ISV demo backend listening on :${config.port} -> STX ${config.stxBaseUrl} | app: ${config.app.id} | login mode: ${login}`,
+);
 
 export default {
   port: config.port,

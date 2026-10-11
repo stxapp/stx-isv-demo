@@ -3,20 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Sideline: STX sample app (backend, the confidential OAuth client). Sideline is a fictional sports app used to demonstrate building on STX; it is not a real product or company.",
+  "description": "STX sample app (backend, the confidential client). The app it presents (Sideline, Playbook) is fictional and used to demonstrate building on STX; it is not a real product or company.",
   "scripts": {
     "dev": "bun --watch run src/index.ts",
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "e2e": "bun run e2e/run.ts"
   },
   "dependencies": {
     "@privy-io/server-auth": "^1.32.5",
-    "@stxapp/stx-typescript": "^0.6.3",
-    "hono": "^4.6.3"
+    "@stxapp/stx-typescript": "0.9.0-alpha.1",
+    "hono": "^4.6.3",
+    "openid-client": "^6.8.1"
   },
   "devDependencies": {
     "@types/bun": "^1.1.10",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "jose": "^6.1.0"
   }
 }

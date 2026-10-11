@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, BACKEND, type MeState, type PublicApp } from "./api";
+import { api, BACKEND, type LoginInfo, type MeState, type PublicApp } from "./api";
 import { marketLabel, setStxUrl, stxHost, type MarketBrief, type MarketSummary } from "./publicMarketData";
 import { IsvLogo } from "./components/IsvLogo";
-import { SignIn } from "./components/SignIn";
-import { PrivySignIn } from "./components/PrivySignIn";
-import { privyActions } from "./privyBridge";
+import { DEFAULT_LOGIN, SignIn, signOutOfLogin, successMessage } from "./login";
 import { Wallets } from "./components/Wallets";
 import { AccountMenu } from "./components/AccountMenu";
 import { LiveFeed } from "./components/LiveFeed";
@@ -45,13 +43,21 @@ const ERROR_MESSAGES: Record<string, string> = {
   missing_code_or_state: "STX did not return an authorization code. Try again.",
   token_exchange_failed: "STX rejected the token exchange. Check the client credentials.",
   link_target_gone: "The account to link to was gone by the time STX redirected back.",
+  session_mismatch: "That sign-in was started in another browser. Start again here.",
+  expired: "The sign-in took too long. Try again.",
+  sign_in_failed: "The sign-in could not be completed. Try again.",
+  stx_unavailable: "STX sign-in is unavailable right now. Try again shortly.",
+  login_unavailable: "The login service is unavailable right now. Try again shortly.",
+  access_denied: "The sign-in was cancelled.",
+  account_pending: "Your STX account is still being set up. Finish at STX, then try again.",
 };
 
-// Top-level app: Sideline, a fictional sports app, connecting to STX.
+// Top-level app: a fictional sports app built on STX. How people get into it
+// is the login mode (see login/); everything else here is the same in each.
 // Main column: the public, credential-free live markets with scores. Side
 // column: the member journey (sign in, dual wallet, link STX) and the betslip,
 // which appears when a market is tapped.
-export function App({ privy = false }: { privy?: boolean } = {}) {
+export function App({ login = DEFAULT_LOGIN }: { login?: LoginInfo } = {}) {
   const [profile, setProfile] = useState<PublicApp | null>(null);
   const [me, setMe] = useState<MeState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,11 +159,12 @@ export function App({ privy = false }: { privy?: boolean } = {}) {
     const err = params.get("error");
     const linked = params.get("linked");
     if (err) setBanner({ kind: "error", text: ERROR_MESSAGES[err] ?? `OAuth error: ${err}` });
-    else if (linked) setBanner({ kind: "ok", text: "STX account linked." });
+    else if (linked) setBanner({ kind: "ok", text: successMessage(login, "linked") });
+    else if (params.get("signed_in")) setBanner({ kind: "ok", text: successMessage(login, "signed_in") });
     // Drop only the app's own flags; anything else (utm_* campaign tags) stays
     // for the landing page view.
-    if (params.has("error") || params.has("linked") || params.has("app")) {
-      for (const k of ["error", "linked", "app"]) params.delete(k);
+    if (params.has("error") || params.has("linked") || params.has("signed_in") || params.has("app")) {
+      for (const k of ["error", "linked", "signed_in", "app"]) params.delete(k);
       const rest = params.toString();
       window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
     }
@@ -197,7 +204,10 @@ export function App({ privy = false }: { privy?: boolean } = {}) {
       if (!data || data.type !== "stx-link") return;
       if (data.status === "linked") {
         track("link_success");
-        setBanner({ kind: "ok", text: "STX account linked." });
+        setBanner({ kind: "ok", text: successMessage(login, "linked") });
+      } else if (data.status === "signed_in") {
+        track("sign_in");
+        setBanner({ kind: "ok", text: successMessage(login, "signed_in") });
       } else if (data.error) {
         track("link_error", { error: String(data.error).slice(0, 40) });
         setBanner({
@@ -237,10 +247,10 @@ export function App({ privy = false }: { privy?: boolean } = {}) {
   }, [theme]);
 
   async function handleSignout() {
-    await api.signout();
-    // Signing out of the app also signs out of its login (Privy). The STX
-    // connection stays with the user for their next sign-in.
-    await privyActions.logout?.();
+    const { signOutUrl } = await api.signout();
+    // Signing out of the app also signs out of the login behind it (Privy, or
+    // the login service). The STX link stays with the user for next time.
+    if (await signOutOfLogin(signOutUrl)) return;
     await afterAuthChange();
   }
 
@@ -371,18 +381,16 @@ export function App({ privy = false }: { privy?: boolean } = {}) {
           {/* Trade + account: the ISV member journey, on the right like a real book. */}
           <aside className="trade-col">
             {loading || !app ? (
-              <div className="card">
+              <div className="card account-slot">
                 <p className="muted">Loading…</p>
               </div>
             ) : (
               <>
-                {!me?.user &&
-                  (privy ? (
-                    <PrivySignIn app={app} onSignedIn={afterAuthChange} />
-                  ) : (
-                    <SignIn app={app} onSignedIn={afterAuthChange} />
-                  ))}
-                {me?.user && <Wallets app={app} linked={linked} refreshKey={refreshKey} />}
+                {/* Sign-in or the wallet; on phones this moves above the markets. */}
+                <div className="account-slot">
+                  {!me?.user && <SignIn login={login} app={app} onSignedIn={afterAuthChange} />}
+                  {me?.user && <Wallets app={app} linked={linked} refreshKey={refreshKey} />}
+                </div>
                 {/* Appears when a market is tapped; unlinked, it carries the
                     link call to action where the order would go. */}
                 <Betslip
@@ -421,7 +429,7 @@ export function App({ privy = false }: { privy?: boolean } = {}) {
       <footer className="app-foot">
         <div className="foot-text">
           <p className="fiction-note" id="fiction-note">
-            Sideline is a demo app built on the STX API. Not a real product.
+            {appName} is a demo app built on the STX API. Not a real product.
           </p>
           <p className="muted">Markets, scores, orders and balances are real data from the STX environment at {stxHost()}.</p>
           <AnalyticsOptOut />

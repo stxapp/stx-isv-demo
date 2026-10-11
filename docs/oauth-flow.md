@@ -69,6 +69,20 @@ sequenceDiagram
 PKCE means a code intercepted on the redirect is useless without the verifier,
 which never leaves the backend.
 
+This is the link step of the `own` and `vendor` login modes (`LOGIN_MODE`, see the [README](../README.md#login-modes)); the code is [`node-react/backend/src/login/link.ts`](../node-react/backend/src/login/link.ts).
+
+## Registering or logging in with an STX account
+
+In the `stx` login mode the app has no login of its own, and the same round trip also tells the app who the member is. Three things change from the steps above:
+
+- Step 2 also asks for the `openid` scope and sends a single-use `nonce`. With no `connection`, the member lands on STX's own page to log in or register; `connection=google`, `apple` or `x` goes straight to that sign-in method.
+  SDK: `connect.start({ connection })` returns the `url`, plus the `state`, `codeVerifier` and `nonce` to keep in your server session.
+- Step 8 also returns an `id_token`, signed by STX. The backend checks its signature against STX's published keys, and its issuer, audience, expiry and `nonce`.
+  SDK: `connect.finish(callbackUrl, saved)` does the exchange and every check, and returns `{ identity, tokens }`.
+- The app finds or creates its own user on `identity.sub`, the member's stable STX id for this app, and stores the tokens against that user. A returning member lands on the same account.
+
+`connect` comes from `createConnect({ issuer, clientId, clientSecret, redirectUri, scopes })`, which reads the endpoints from `<issuer>/.well-known/openid-configuration`. The code is [`node-react/backend/src/login/stx/index.ts`](../node-react/backend/src/login/stx/index.ts).
+
 ## Calling STX for the member
 
 `oauth.memberClient(tokens, memberKey)` returns an `STX` client that sends
@@ -190,4 +204,4 @@ join throws `STXChannelException`. The SDK reconnects and rejoins after a drop.
 
 - TypeScript SDK reference: <https://docs.stxapp.io/sdks/typescript/>
 - All STX SDKs: <https://docs.stxapp.io/sdks/>
-- Sideline's SDK wiring: [`node-react/backend/src/stx.ts`](../node-react/backend/src/stx.ts)
+- The app's SDK wiring: [`node-react/backend/src/stx.ts`](../node-react/backend/src/stx.ts)

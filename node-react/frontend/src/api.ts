@@ -49,10 +49,13 @@ export class ApiError extends Error {
   // balance…); show that instead of a bare status.
   static describe(status: number, body: unknown): string {
     const code = errCode(body);
-    if (status === 401 || code === "not_linked") return "Your STX account isn’t connected.";
-    if (code && code !== "not_linked") return code;
+    // A 401 from an STX proxy is a missing link; other 401s say what they are.
+    if (code === "not_linked" || (status === 401 && !code)) return "Your STX account isn’t connected.";
+    // The app's own errors carry a sentence for the person (`message`) next to
+    // the code; STX's forwarded rejections carry only the reason as `error`.
     const msg = body && typeof body === "object" ? (body as Record<string, unknown>).message : null;
     if (typeof msg === "string" && msg) return msg;
+    if (code) return code;
     return `API error ${status}`;
   }
 }
@@ -78,6 +81,8 @@ export interface PublicApp {
 export interface DemoUser {
   id: string;
   name: string;
+  // Their email, when the login gave one.
+  email?: string | null;
   walletCents: number;
   walletDollars: string;
 }
@@ -94,10 +99,20 @@ export interface MeState {
   link: LinkState;
 }
 
+// How people get into this deployment (the backend's LOGIN_MODE); see login/.
+export interface LoginInfo {
+  mode: "own" | "stx" | "vendor";
+  // `own` mode: which login the app uses.
+  own: "privy" | "mock" | null;
+  // `own` + `privy`: the Privy App ID.
+  privyAppId: string | null;
+  // `vendor` mode: the login service's name, for the button.
+  vendorName: string | null;
+}
+
 export interface AppResponse {
   app: PublicApp;
-  // The Privy App ID when the app's own login is Privy; null for the mock sign-in.
-  privyAppId?: string | null;
+  login?: LoginInfo;
   // The exchange's public origin (deposit popup, sport icons).
   stxPublicUrl?: string;
   // Google Analytics 4 id when the deployment enables it, else null.
@@ -204,6 +219,13 @@ export interface ConnectHint {
   loginHint: string | null;
 }
 let connectHint: ConnectHint = { connection: null, loginHint: null };
+
+// Where linking starts on the backend: "/login", or the STX login itself when
+// logging in and linking are one step (set from the login mode, see login/).
+let linkStartPath = "/login";
+export function setLinkStartPath(path: string): void {
+  linkStartPath = path;
+}
 export function setConnectHint(hint: ConnectHint): void {
   connectHint = hint;
 }
@@ -219,7 +241,7 @@ export function linkUrl(hint: ConnectHint = connectHint): string {
   if (hint.connection) q.set("connection", hint.connection);
   if (hint.loginHint) q.set("login_hint", hint.loginHint);
   const qs = q.toString();
-  return `${BACKEND}/login${qs ? `?${qs}` : ""}`;
+  return `${BACKEND}${linkStartPath}${qs ? `?${qs}` : ""}`;
 }
 
 export function startLink(): void {
@@ -251,7 +273,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ accessToken }),
     }),
-  signout: () => req<{ ok: boolean }>("/api/signout", { method: "POST" }),
+  // `signOutUrl`: where to go next so the login behind the app signs out too.
+  signout: () => req<{ ok: boolean; signOutUrl?: string | null }>("/api/signout", { method: "POST" }),
   unlink: () => req<{ ok: boolean }>("/api/unlink", { method: "POST" }),
   // Demo top-up of the app's own wallet (no payment; STX funds are added at STX).
   addFunds: (cents: number) =>

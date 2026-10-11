@@ -175,6 +175,7 @@ export function trackPage(path: string, title: string): void {
 
 export type AnalyticsEvent =
   | "sign_in"
+  | "sign_in_start"
   | "link_start"
   | "link_success"
   | "link_error"

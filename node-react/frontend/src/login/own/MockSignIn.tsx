@@ -1,12 +1,12 @@
-import { track } from "../analytics";
+import { track } from "../../analytics";
 import { useState } from "react";
-import { api, type PublicApp } from "../api";
+import { api, type PublicApp } from "../../api";
 
-// Mock sign-in to the ISV app. There is NO real auth here: it stands in for the
-// user already being a Sideline customer with their own account and wallet.
-// Signing in creates that local user; linking STX comes afterwards. Sideline is
+// Mock sign-in to the app. There is NO real auth here: it stands in for the
+// user already being a customer of the app with their own account and wallet.
+// Signing in creates that local user; linking STX comes afterwards. The app is
 // fictional, and the card says so.
-export function SignIn({ app, onSignedIn }: { app: PublicApp; onSignedIn: () => void }) {
+export function MockSignIn({ app, onSignedIn }: { app: PublicApp; onSignedIn: () => void }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

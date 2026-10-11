@@ -5,10 +5,10 @@
 // this same backend can point at a local server, a sandbox, or production
 // without a code change.
 //
-// This demo presents as one ISV app, "Sideline" (a fictional sports app used to
-// demonstrate building on STX), that connects to STX as a confidential OAuth
-// client. Its identity (client_id/secret/name/brand/scopes) is the app profile
-// below, read from CLIENT_ID/CLIENT_SECRET/APP_*.
+// This demo presents as one fictional sports app that connects to STX as a
+// confidential client. Its identity (client_id/secret/name/brand/scopes) is the
+// app profile below, read from CLIENT_ID/CLIENT_SECRET/APP_*, and LOGIN_MODE
+// picks how people get into it (see src/login/).
 
 import { gaDomainsFrom, gaMeasurementIdFrom, gaRegionsFrom } from "./analytics";
 
@@ -79,12 +79,52 @@ const sideline: AppProfile = {
   brandColor: optional("APP_BRAND_COLOR", "#3d8bff"),
   clientId: required("CLIENT_ID"),
   clientSecret: required("CLIENT_SECRET"),
-  redirectUri: optional("REDIRECT_URI", publicUrl ? `${publicUrl}/callback` : "") || required("REDIRECT_URI"),
+  redirectUri: optional("REDIRECT_URI", publicUrl ? `${publicUrl}/callback` : "http://localhost:8787/callback"),
   scopes: optional("OAUTH_SCOPES", "profile.read balance.read portfolio.read orders.read orders.write"),
   startingWalletCents: parseCents("APP_WALLET_CENTS", 25_000), // $250.00
 };
 
 const stxBaseUrl = required("STX_BASE_URL").replace(/\/+$/, "");
+
+export type LoginMode = "own" | "stx" | "vendor";
+export type OwnLogin = "privy" | "mock";
+
+// LOGIN_MODE picks how people get into the app. Unset means `own`.
+function loginMode(): LoginMode {
+  const raw = optional("LOGIN_MODE", "own").toLowerCase();
+  if (raw === "own" || raw === "stx" || raw === "vendor") return raw;
+  throw new Error(`LOGIN_MODE must be own, stx or vendor (got "${raw}").`);
+}
+
+export function withOpenId(scopes: string): string {
+  const list = scopes.split(/\s+/).filter(Boolean);
+  return (list.includes("openid") ? list : ["openid", ...list]).join(" ");
+}
+
+function vendorClientAuth(): "client_secret_basic" | "client_secret_post" {
+  const raw = optional("VENDOR_CLIENT_AUTH", "client_secret_basic");
+  if (raw === "client_secret_basic" || raw === "client_secret_post") return raw;
+  throw new Error(`VENDOR_CLIENT_AUTH must be client_secret_basic or client_secret_post (got "${raw}").`);
+}
+
+// `vendor` mode needs the login service's settings.
+if (loginMode() === "vendor") {
+  required("VENDOR_ISSUER");
+  required("VENDOR_CLIENT_ID");
+  required("VENDOR_CLIENT_SECRET");
+}
+
+// OWN_LOGIN picks the app's own login in `own` mode. Unset means `privy` when
+// the Privy keys are set and `mock` otherwise.
+function ownLogin(): OwnLogin {
+  const hasPrivy = optionalRaw("PRIVY_APP_ID") !== null && optionalRaw("PRIVY_APP_SECRET") !== null;
+  const raw = optional("OWN_LOGIN", hasPrivy ? "privy" : "mock").toLowerCase();
+  if (raw !== "privy" && raw !== "mock") throw new Error(`OWN_LOGIN must be privy or mock (got "${raw}").`);
+  if (raw === "privy" && !hasPrivy && loginMode() === "own") {
+    throw new Error("OWN_LOGIN=privy needs PRIVY_APP_ID and PRIVY_APP_SECRET.");
+  }
+  return raw;
+}
 
 
 export const config = {
@@ -150,11 +190,57 @@ export const config = {
   // SQLite file, mounted on a volume in Docker so state survives a restart.
   dbPath: optional("DB_PATH", "./data/isv.sqlite"),
 
-  // Privy (https://privy.io) as the app's own login. With both set, sign-in is a
-  // real Privy login (email, Google, X) and the mock sign-in is off; the App ID
-  // is public and sent to the browser (GET /api/app), the secret stays here.
+  // How people get into the app (see src/login/). One setting, three modes:
+  //   own     the app has its own login, then the user links their STX account
+  //   stx     people register or log in with their STX account
+  //   vendor  the app's login is a login service that offers STX as an option
+  login: {
+    mode: loginMode(),
+    // `own` mode only: which login the app uses. `privy` (https://privy.io) is
+    // what this demo happens to use; `mock` is a no-password stand-in.
+    own: ownLogin(),
+  },
+
+  // `own` + `privy`: the App ID is public and sent to the browser
+  // (GET /api/app); the secret stays here.
   privyAppId: optionalRaw("PRIVY_APP_ID") ?? null,
   privyAppSecret: optionalRaw("PRIVY_APP_SECRET") ?? null,
+
+  // `stx` mode: the redirect URI registered on this app's STX client for
+  // registering or logging in with an STX account (exact match). The address
+  // the sign-in documents are read from is the exchange unless STX_ISSUER is set.
+  stxLogin: {
+    issuer: optional("STX_ISSUER", stxBaseUrl).replace(/\/+$/, ""),
+    redirectUri: optional(
+      "STX_LOGIN_REDIRECT_URI",
+      publicUrl ? `${publicUrl}/auth/stx/callback` : "http://localhost:8787/auth/stx/callback",
+    ),
+  },
+
+  // `vendor` mode: the login service, as generic OpenID Connect settings. Any
+  // service that publishes /.well-known/openid-configuration works.
+  vendor: {
+    // Shown on the sign-in button ("Continue with <name>").
+    name: optional("VENDOR_NAME", "your login service"),
+    issuer: (optionalRaw("VENDOR_ISSUER") ?? "").replace(/\/+$/, ""),
+    clientId: optionalRaw("VENDOR_CLIENT_ID") ?? "",
+    clientSecret: optionalRaw("VENDOR_CLIENT_SECRET") ?? "",
+    redirectUri: optional(
+      "VENDOR_REDIRECT_URI",
+      publicUrl ? `${publicUrl}/auth/vendor/callback` : "http://localhost:8787/auth/vendor/callback",
+    ),
+    // `openid` is always asked for: it is what makes the service return the
+    // ID token that says who logged in.
+    scopes: withOpenId(optional("VENDOR_SCOPES", "openid profile email")),
+    // How the client secret is sent to the service's token endpoint.
+    clientAuth: vendorClientAuth(),
+    // Extra query parameters for the service's authorize URL, as a query
+    // string. Many services take one that goes straight to a login option,
+    // e.g. `connection=stx`.
+    authorizeParams: optional("VENDOR_AUTHORIZE_PARAMS", ""),
+    // Allow an http:// issuer (local development and tests only).
+    allowInsecure: optional("VENDOR_ALLOW_INSECURE", "false") === "true",
+  },
 
   // Cookie flags. Set COOKIE_SECURE=true behind HTTPS.
   cookieSecure: optional("COOKIE_SECURE", "false") === "true",

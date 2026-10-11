@@ -1,7 +1,7 @@
 // Routes the frontend calls. Three groups:
-//   - app + session state: /app, /me, /login (mock ISV sign-in), /signout
-//   - account linking side-effects: /unlink (the OAuth link itself is /login +
-//     /callback in routes/auth.ts)
+//   - app + session state: /app, /me, /signout (signing in is per login mode,
+//     see ../login/)
+//   - account linking side-effects: /unlink (linking itself is in ../login/)
 //   - authenticated STX proxies: /wallet, /balance, /orders, /activity
 //
 // Each STX proxy resolves the app, the signed-in user, and
@@ -13,12 +13,12 @@
 
 import { Hono, type Context } from "hono";
 import type { NewOrderInput, STX } from "@stxapp/stx-typescript";
-import { STXGrantRevokedException } from "@stxapp/stx-typescript/oauth";
+import { STXAccountPendingException, STXGrantRevokedException } from "@stxapp/stx-typescript/oauth";
 import { buildDetail } from "../activityDetail";
 import { config, type AppProfile } from "../config";
-import { appFromRequest, centsToDollarString, extractStxCashCents } from "../helpers";
-import { getOrCreateSession, getSession } from "../session";
-import { privyEnabled, verifyPrivyUser } from "../privy";
+import { appFromRequest, centsToDollarString, extractStxCashCents, publicUser } from "../helpers";
+import { clearSession, getSession } from "../session";
+import { publicLogin, signOutUrl } from "../login";
 import { activityStore, linkStore, userStore, type AccountLink, type User } from "../stores";
 import { MARKET_DATA_SCOPE, memberClient, NotLinkedError, stxApp, stxErrorResponse, type SdkCall } from "../stx";
 import { sdkCalls } from "../sdkCall";
@@ -37,6 +37,11 @@ async function forward(c: Context, call: () => Promise<unknown>): Promise<Respon
   try {
     return c.json((await call()) as object);
   } catch (err) {
+    // The member's STX account is still being verified: the link is kept (the
+    // SDK keeps the tokens), and calls work once STX finishes.
+    if (err instanceof STXAccountPendingException) {
+      return c.json({ error: "account_pending", message: "Your STX account is still being set up. Finish at STX, then try again." }, 409);
+    }
     if (err instanceof STXGrantRevokedException) {
       throw new NotLinkedError("Your STX link was revoked. Link your STX account again.");
     }
@@ -103,87 +108,34 @@ apiRoutes.get("/app", (c) => {
     gaIgnoreReferrerDomains: config.gaIgnoreReferrerDomains,
     gaLinkedDomains: config.gaLinkedDomains,
     gaConsentRequiredRegions: config.gaConsentRequiredRegions,
-    // Public: the browser's Privy SDK needs it. Null: the mock sign-in.
-    privyAppId: privyEnabled() ? config.privyAppId : null,
+    // How people get into this deployment (LOGIN_MODE), for the sign-in UI.
+    login: publicLogin(),
   });
 });
 
-// POST /api/login/privy?app=<id>: sign in with the app's own login (Privy).
-// Body: { accessToken } from the browser's Privy SDK. The token is verified
-// here; the user is keyed on the Privy user id, so a returning user gets their
-// wallet and STX link back on any browser. Answers with the hint for the STX
-// connect step (how they signed in, and their email).
-apiRoutes.post("/login/privy", async (c) => {
-  const app = requireApp(c);
-  if (!privyEnabled()) return c.json({ error: "privy_not_configured" }, 404);
-  const body = (await c.req.json().catch(() => ({}))) as { accessToken?: unknown };
-  if (typeof body.accessToken !== "string" || body.accessToken === "") {
-    return c.json({ error: "missing_access_token" }, 400);
-  }
-  let who;
-  try {
-    who = await verifyPrivyUser(body.accessToken);
-  } catch {
-    return c.json({ error: "invalid_privy_token" }, 401);
-  }
-  // A mock user on this browser is about to be replaced (see signInExternal).
-  // End its STX link properly first: revoke at STX and close its live feed.
-  const sessionId = getOrCreateSession(c);
-  const here = userStore.find(sessionId, app.id);
-  if (here && !here.externalId) await revokeAndDropLink(app, here);
-  const user = userStore.signInExternal({
-    sessionId,
-    appId: app.id,
-    externalId: who.userId,
-    name: who.name,
-    startingWalletCents: app.startingWalletCents,
-  });
-  return c.json({
-    user: publicUser(user),
-    connectHint: { connection: who.connection ?? null, loginHint: who.email ?? null },
-  });
-});
-
-// POST /api/login?app=<id>: mock ISV sign-in. Body: { name? }. Creates the
-// user + wallet for (session, app) if absent (no real auth: this stands in for
-// the user already being a Sideline customer). Idempotent.
-apiRoutes.post("/login", async (c) => {
-  const app = requireApp(c);
-  // With a real login configured, the mock one is off.
-  if (privyEnabled()) return c.json({ error: "use_privy_login" }, 404);
-  const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
-  const name =
-    typeof body.name === "string" && body.name.trim() !== ""
-      ? body.name.trim()
-      : `${app.name} demo user`;
-
-  const sessionId = getOrCreateSession(c);
-  const user = userStore.ensure({
-    sessionId,
-    appId: app.id,
-    name,
-    startingWalletCents: app.startingWalletCents,
-  });
-  return c.json({ user: publicUser(user) });
-});
-
-// POST /api/signout?app=<id>: sign out of the ISV app entirely: revoke + drop
-// the STX link (if any) and remove the user + wallet for (session, app).
+// POST /api/signout?app=<id>: sign out of the app on this browser.
+// - A user with an account behind them (every login but the mock one) is only
+//   detached from the session: the user, their wallet and their STX link stay
+//   for the next sign-in.
+// - A mock-login user has nothing to come back to, so they are removed
+//   entirely: the STX link is revoked and dropped, the user and wallet deleted.
+// `signOutUrl` is where the browser should go next so the login behind the app
+// signs out too (`vendor` mode), or null.
 apiRoutes.post("/signout", async (c) => {
   const app = requireApp(c);
   const sid = getSession(c);
   if (sid) {
     const user = userStore.find(sid, app.id);
     if (user?.externalId) {
-      // A real login (Privy): sign out of this browser only. The user, their
-      // wallet and their STX connection stay for the next sign-in.
       userStore.detachSession(sid, app.id);
     } else if (user) {
       await revokeAndDropLink(app, user);
       userStore.remove(sid, app.id);
     }
+    // The session id is finished with: the next visit starts a new one.
+    clearSession(c);
   }
-  return c.json({ ok: true });
+  return c.json({ ok: true, signOutUrl: await signOutUrl() });
 });
 
 // POST /api/unlink?app=<id>: unlink the STX account: best-effort revoke at STX
@@ -641,15 +593,6 @@ apiRoutes.get("/activity/:id/detail", (c) => {
 
 // ---- helpers ---------------------------------------------------------------
 
-function publicUser(user: User) {
-  return {
-    id: user.id,
-    name: user.name,
-    walletCents: user.walletCents,
-    walletDollars: centsToDollarString(user.walletCents),
-  };
-}
-
 // One real STX call for the user, to learn whether their link still works. A
 // refused refresh drops the link (the SDK does it); an STX 401 that survives a
 // refresh drops it here. Anything else (a 5xx, no answer) keeps it.
@@ -667,7 +610,7 @@ async function verifyLink(app: AppProfile, user: User): Promise<void> {
 
 // Best-effort revoke the STX grant at STX, drop the local link and close the
 // user's live feed. Safe to call when the user has no link.
-async function revokeAndDropLink(app: AppProfile, user: User): Promise<void> {
+export async function revokeAndDropLink(app: AppProfile, user: User): Promise<void> {
   if (!linkStore.get(user.id)) return;
   // The SDK revokes the refresh token (which kills the pair) and deletes the
   // link whether or not STX answered.

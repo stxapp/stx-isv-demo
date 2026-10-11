@@ -936,6 +936,18 @@ code {
   .trade-col { position: static; max-height: none; overflow: visible; }
 }
 
+/* Phones: the trade column's items join the page flow so sign-in or the wallet
+   sits above the markets, and the betslip and live feed stay below them. */
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .trade-col { display: contents; }
+  .trade-col > .account-slot { order: -1; }
+  .layout > .market-col { order: 0; }
+  .trade-col > * { order: 1; }
+  .signin .fiction-note { display: none; }
+  .signin h3 { margin-top: 0; }
+}
+
 /* ================= Trade panel ================= */
 .trade-panel {
   border: 1px solid var(--border);
@@ -2108,3 +2120,66 @@ table.activity tr.activity-detail-row td { background: color-mix(in srgb, var(--
 .amount-pick.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 16%, var(--inset)); }
 .amount-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 420px) { .amount-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Sign in with STX: one button per provider. */
+.signin-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+/* Provider-branded sign-in buttons: each follows its provider's guidelines
+   (Google dark theme, Apple white style, X white mark on black), one size. */
+.signin-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.signin-provider img {
+  display: block;
+}
+/* The STX account button reuses the link button's look, full width. */
+.signin-stx { width: 100%; min-height: 44px; justify-content: center; }
+.signin-provider.google {
+  gap: 12px;
+  background: #131314;
+  border: 1px solid #8e918f;
+  color: #e3e3e3;
+  font-family: "Roboto", system-ui, sans-serif;
+  font-weight: 500;
+}
+.signin-provider.google img {
+  width: 20px;
+  height: 20px;
+}
+.signin-provider.apple {
+  gap: 8px;
+  background: #fff;
+  /* Apple's "white with outline" style, so it stays visible on a light card. */
+  border: 1px solid #000;
+  color: #000;
+  font-weight: 500;
+}
+.signin-provider.apple img {
+  height: 18px;
+  margin-top: -2px;
+}
+.signin-provider.x {
+  gap: 10px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-weight: 500;
+}
+.signin-provider.x img {
+  height: 16px;
+}
+
+/* Shown only while the backend cannot be reached for the login mode. */
+.boot-wait { padding: 24px; text-align: center; }
