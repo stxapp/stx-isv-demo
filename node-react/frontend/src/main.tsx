@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { api, setLinkStartPath, type LoginInfo } from "./api";
+import { api, setLinkStartPath, type AppResponse } from "./api";
 import { App } from "./App";
 import { setLinkCopy } from "./components/LinkStx";
 import { DEFAULT_LOGIN, linkCopy, linkPath, LoginProvider, retryDelayMs } from "./login";
@@ -9,7 +9,7 @@ import "./styles.css";
 // The backend says how people get into this deployment (LOGIN_MODE). Read at
 // runtime, so one build serves every mode and no rebuild switches it.
 function Root() {
-  const [login, setLogin] = useState<LoginInfo | undefined>(undefined);
+  const [boot, setBoot] = useState<AppResponse | undefined>(undefined);
   useEffect(() => {
     let stopped = false;
     // The mode decides which sign-in is drawn and where linking starts, so it
@@ -17,11 +17,13 @@ function Root() {
     (async () => {
       for (let attempt = 0; !stopped; attempt++) {
         try {
-          const l = (await api.app()).login ?? DEFAULT_LOGIN;
+          const res = await api.app();
           if (stopped) return;
+          const l = res.login ?? DEFAULT_LOGIN;
           setLinkStartPath(linkPath(l));
           setLinkCopy((appName) => linkCopy(l, appName));
-          setLogin(l);
+          // Kept whole: App draws from this answer instead of asking again.
+          setBoot(res);
           return;
         } catch {
           await new Promise((resolve) => setTimeout(resolve, retryDelayMs(attempt)));
@@ -32,10 +34,11 @@ function Root() {
       stopped = true;
     };
   }, []);
-  if (login === undefined) return <p className="muted boot-wait">Loading…</p>;
+  if (boot === undefined) return <p className="muted boot-wait">Loading…</p>;
+  const login = boot.login ?? DEFAULT_LOGIN;
   return (
     <LoginProvider login={login}>
-      <App login={login} />
+      <App login={login} boot={boot} />
     </LoginProvider>
   );
 }

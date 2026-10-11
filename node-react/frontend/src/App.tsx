@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, BACKEND, type LoginInfo, type MeState, type PublicApp } from "./api";
+import { api, BACKEND, type AppResponse, type LoginInfo, type MeState, type PublicApp } from "./api";
 import { marketLabel, setStxUrl, stxHost, type MarketBrief, type MarketSummary } from "./publicMarketData";
 import { IsvLogo } from "./components/IsvLogo";
 import { DEFAULT_LOGIN, SignIn, signOutOfLogin, successMessage } from "./login";
@@ -57,7 +57,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 // Main column: the public, credential-free live markets with scores. Side
 // column: the member journey (sign in, dual wallet, link STX) and the betslip,
 // which appears when a market is tapped.
-export function App({ login = DEFAULT_LOGIN }: { login?: LoginInfo } = {}) {
+// `boot` is the answer main.tsx already has from GET /api/app, so it is not
+// asked for twice.
+export function App({ login = DEFAULT_LOGIN, boot }: { login?: LoginInfo; boot?: AppResponse } = {}) {
   const [profile, setProfile] = useState<PublicApp | null>(null);
   const [me, setMe] = useState<MeState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -171,7 +173,7 @@ export function App({ login = DEFAULT_LOGIN }: { login?: LoginInfo } = {}) {
 
     (async () => {
       try {
-        const res = await api.app();
+        const res = boot ?? (await api.app());
         // Before setProfile: the re-render it triggers reads stxUrl()/stxHost().
         setStxUrl(res.stxPublicUrl);
         setProfile(res.app);
