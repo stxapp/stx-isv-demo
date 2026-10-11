@@ -129,7 +129,7 @@ export function AccountMenu({
                 </p>
                 <p className="muted">The access token stays on {app.name}'s backend; this browser never sees it.</p>
                 <button type="button" className="unlink-btn" onClick={unlink} disabled={busy}>
-                  {busy ? "Unlinking…" : "Unlink STX account"}
+                  {busy ? "Disconnecting…" : "Disconnect STX account"}
                 </button>
                 {error && <p className="error">{error}</p>}
               </>

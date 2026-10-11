@@ -4,7 +4,7 @@ import { StxLogo } from "./PoweredByStx";
 // The words on the button, per login mode (set once at boot from login/linkCopy).
 type LinkCopy = (appName: string) => { label: string; hint: string };
 let copyFor: LinkCopy = (appName) => ({
-  label: "Link your STX account",
+  label: "Connect your STX account",
   hint: `Trade on STX from ${appName}. You'll sign in to STX and approve access.`,
 });
 export function setLinkCopy(fn: LinkCopy): void {

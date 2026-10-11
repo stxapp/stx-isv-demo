@@ -27,7 +27,7 @@ export function PoweredByStx({ compact = false }: { compact?: boolean }) {
       className={`powered-by${compact ? " powered-by-compact" : ""}`}
       href={stxUrl()}
       target="_blank"
-      rel="noreferrer"
+      rel="noopener noreferrer"
       title="Powered by the STX Exchange"
     >
       <span className="powered-by-text">Powered by</span>
