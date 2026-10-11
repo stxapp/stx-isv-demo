@@ -16,13 +16,13 @@ describe("the served page", () => {
       hasImages: false,
     });
     expect(out).toBe(html.replaceAll("__PUBLIC_URL__", "https://sideline.example.com"));
-    expect(out).toContain("<title>Sideline: STX sample app</title>");
+    expect(out).toContain("<title>Sideline: STX demo app</title>");
     expect(out).not.toContain("__PUBLIC_URL__");
   });
 
   test("the default app under another name keeps its icons and takes the name", () => {
     const out = brandIndexHtml(html, { origin: "https://x.example.com", appId: "sideline", appName: "Touchline", hasIcon: true, hasImages: false });
-    expect(out).toContain("<title>Touchline: STX sample app</title>");
+    expect(out).toContain("<title>Touchline: STX demo app</title>");
     expect(out).toContain('href="/assets/brand/sideline-icon.svg"');
     expect(out).toContain('href="/assets/brand/favicon-32.png"');
   });
@@ -35,7 +35,7 @@ describe("the served page", () => {
       hasIcon: true,
       hasImages: true,
     });
-    expect(out).toContain("<title>Playbook: STX sample app</title>");
+    expect(out).toContain("<title>Playbook: STX demo app</title>");
     expect(out).toContain('href="/assets/brand/playbook-icon.svg"');
     expect(out).toContain('href="/assets/brand/playbook/favicon-32.png"');
     expect(out).toContain('content="https://playbook.example.com/assets/brand/playbook/og-image.png"');
@@ -51,7 +51,7 @@ describe("the served page", () => {
       hasIcon: false,
       hasImages: false,
     });
-    expect(out).toContain("<title>Club &#60;House&#62;: STX sample app</title>");
+    expect(out).toContain("<title>Club &#60;House&#62;: STX demo app</title>");
     expect(out).toContain('href="/assets/brand/sideline-icon.svg"');
     expect(out).toContain('href="/assets/brand/favicon-32.png"');
   });

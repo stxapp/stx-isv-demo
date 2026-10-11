@@ -49,7 +49,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   stx_unavailable: "STX sign-in is unavailable right now. Try again shortly.",
   login_unavailable: "The login service is unavailable right now. Try again shortly.",
   access_denied: "The sign-in was cancelled.",
-  account_pending: "Your STX account is still being set up. Finish at STX, then try again.",
+  account_pending: "STX is still verifying your account. Finish verifying your STX account, then try again.",
 };
 
 // Top-level app: a fictional sports app built on STX. How people get into it

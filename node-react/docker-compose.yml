@@ -1,4 +1,4 @@
-# STX sample app (a fictional sports app used to demonstrate building on STX,
+# STX demo app (a fictional sports app used to demonstrate building on STX,
 # not a real product) on a Bun/TS backend + Vite/React frontend.
 #
 #   cp .env.example .env   # pick LOGIN_MODE, fill in CLIENT_ID / CLIENT_SECRET / STX_BASE_URL

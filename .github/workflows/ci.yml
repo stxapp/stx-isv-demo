@@ -96,7 +96,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the single-container image
-        run: docker build -t stx-sample-app node-react
+        run: docker build -t stx-demo-app node-react
       - name: The image starts in each login mode
         run: |
           set -euo pipefail
@@ -104,7 +104,7 @@ jobs:
             name="$1"; shift
             docker run -d --name "$name" -p 8787:8787 \
               -e STX_BASE_URL=https://stx.example.com -e CLIENT_ID=ci -e CLIENT_SECRET=ci \
-              -e PUBLIC_URL=http://localhost:8787 "$@" stx-sample-app >/dev/null
+              -e PUBLIC_URL=http://localhost:8787 "$@" stx-demo-app >/dev/null
             for i in $(seq 1 30); do
               if out=$(curl -fsS http://localhost:8787/health 2>/dev/null); then break; fi
               sleep 1

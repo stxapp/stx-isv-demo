@@ -1,4 +1,4 @@
-// Backend entry point: the confidential client for the STX sample app.
+// Backend entry point: the confidential client for the STX demo app.
 //
 // It presents as one fictional sports app (Sideline, Playbook, ... by
 // configuration), holds its client_secret and every STX token server-side,

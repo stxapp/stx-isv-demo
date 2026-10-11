@@ -1,26 +1,26 @@
-# STX sample app: three ways to bring a member's STX account into your app
+# STX demo apps: Sideline and Playbook
 
-> **The apps shown here (Sideline, Playbook) are fictional sports apps used to demonstrate building on STX. They are not real products or companies.**
+> **Sideline and Playbook are demo apps. They are fictional sports apps that exist only to show how to build on STX. They are not real products or companies.**
 
-This is one small sports app, built on the STX Exchange, that you can run in three **login modes**. Each mode is a different answer to the same question: how do the people using your app get to trade on STX from it?
+**Try them:**
 
-Once someone is in, the app is the same in every mode. It:
+- **[Sideline demo app](https://sideline.sportsxapp.com)**: an app with its own login, where a signed-in user links their STX account.
+- **[Playbook demo app](https://playbook.sportsxapp.com)**: an app with no login of its own, where people register or log in with their STX account.
 
-1. **acts for the member with scoped tokens**: reads their balance, positions and orders, and places and cancels orders from a betslip;
-2. streams **live account data** (balance, orders, fills, positions) from the member's STX WebSocket to the browser;
-3. reads **public market data** (markets, prices, order books, trades, live scores) on the app's own token, with no member involved;
-4. **unlinks and revokes** the member's grant at STX on request.
+Both are this one codebase, a small sports demo app built on the STX Exchange, run in a different **login mode**. Each mode is a different answer to the same question: how do the people using your app get to trade on STX from it?
 
-The app never holds STX funds, no scope can move money, and the browser never sees an STX token. It is a teaching example: clarity over polish, real code over hand-waving. Every call the backend makes to STX is listed on the app's **API calls** page with the SDK call behind it and a redacted request and response.
+Once someone is in, the demo app is the same in every mode. It reads the member's balance, positions and orders, places and cancels orders from a betslip, streams their live account data, shows public market data on the app's own token, and unlinks on request. It never holds STX funds, no scope can move money, and the browser never sees an STX token.
+
+This repo is the demo, not the manual. How working with a member's STX account works (the flow, scopes, tokens, errors) is in the [STX docs](https://docs.stxapp.io/oauth/). What is here is what is specific to this app: the modes, how to set up and run each, its settings, its tests, and where in the code each step lives. Every call the backend makes to STX is also listed on the running app's **API calls** page, with the SDK call behind it and a redacted request and response.
 
 ## Login modes
 
-Set `LOGIN_MODE` and the same code becomes a different demo. Each mode's code is in its own folder behind one small switch ([`backend/src/login/index.ts`](node-react/backend/src/login/index.ts), [`frontend/src/login/index.tsx`](node-react/frontend/src/login/index.tsx)), so you can read only the one you need.
+Set `LOGIN_MODE` and the same code becomes a different demo app. Each mode's code is in its own folder behind one small switch ([`backend/src/login/index.ts`](node-react/backend/src/login/index.ts), [`frontend/src/login/index.tsx`](node-react/frontend/src/login/index.tsx)), so you can read only the one you need.
 
 | `LOGIN_MODE` | What it demonstrates | Live site | Files to read |
 | --- | --- | --- | --- |
-| `own` | Your app has **its own login**. A signed-in user then **links their STX account** once. `OWN_LOGIN` picks the login: `privy` or `mock`. | [sideline.sportsxapp.com](https://sideline.sportsxapp.com) (Sideline) | [`backend/src/login/own/`](node-react/backend/src/login/own/), [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts), [`frontend/src/login/own/`](node-react/frontend/src/login/own/) |
-| `stx` | Your app has **no login of its own**. People **register or log in with their STX account**; one step signs them in to your app and links their account. | [playbook.sportsxapp.com](https://playbook.sportsxapp.com) (Playbook) | [`backend/src/login/stx/`](node-react/backend/src/login/stx/), [`frontend/src/login/stx/`](node-react/frontend/src/login/stx/) |
+| `own` | Your app has **its own login**. A signed-in user then **links their STX account** once. `OWN_LOGIN` picks the login: `privy` or `mock`. | [Sideline demo app](https://sideline.sportsxapp.com) | [`backend/src/login/own/`](node-react/backend/src/login/own/), [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts), [`frontend/src/login/own/`](node-react/frontend/src/login/own/) |
+| `stx` | Your app has **no login of its own**. People **register or log in with their STX account**; one step signs them in to your app and links their account. | [Playbook demo app](https://playbook.sportsxapp.com) | [`backend/src/login/stx/`](node-react/backend/src/login/stx/), [`frontend/src/login/stx/`](node-react/frontend/src/login/stx/) |
 | `vendor` | Your app's login is a **login service** (Auth0, Clerk, Okta, Cognito, Keycloak, ...) in which **STX has been added as a login option**. | Not deployed yet | [`backend/src/login/vendor/`](node-react/backend/src/login/vendor/), [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts), [`frontend/src/login/vendor/`](node-react/frontend/src/login/vendor/) |
 
 Which one is yours?
@@ -35,20 +35,20 @@ Which one is yours?
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/oauth-flow-dark.svg">
-  <img alt="How the app links an STX account: your server builds a PKCE challenge, the member signs in and approves scopes at STX, your server exchanges the code for tokens and calls the API with the access token" src="docs/oauth-flow-light.svg">
+  <img alt="How the demo app links an STX account: its server builds a PKCE challenge, the member signs in and approves scopes at STX, its server exchanges the code for tokens and calls the API with the access token" src="docs/oauth-flow-light.svg">
 </picture>
 
-- The **browser** talks only to the app backend, with an opaque session cookie.
-- The **backend** holds the `client_secret` and every STX token. It runs the login mode's flow, calls STX through the STX TypeScript SDK, opens the STX sockets, and relays live data to the browser over Server-Sent Events.
+- The **browser** talks only to the app's backend, with an opaque session cookie.
+- The **backend** holds the `client_secret` and every STX token. It runs the login mode's flow, calls STX through the [STX TypeScript SDK](https://docs.stxapp.io/sdks/typescript/), opens the STX sockets, and relays live data to the browser over Server-Sent Events.
 - **STX** hosts its own login, sign-up and consent pages, and the API. The member's STX password is only ever typed at STX.
 
-The steps are plain HTTP and framework-agnostic; [`docs/oauth-flow.md`](docs/oauth-flow.md) walks through linking step by step so a port to Next.js, Python or Go is obvious.
+The flow itself is described in the STX docs: [overview](https://docs.stxapp.io/oauth/), [authorization code flow](https://docs.stxapp.io/oauth/authorization-flow/), [scopes](https://docs.stxapp.io/oauth/scopes/), [tokens and security](https://docs.stxapp.io/oauth/tokens-and-security/), [discovery and errors](https://docs.stxapp.io/oauth/discovery-and-errors/). To follow it in this code, [`docs/oauth-flow.md`](docs/oauth-flow.md) maps each step to its file and SDK call.
 
 ## Get sandbox access
 
-Every mode needs a client on the STX sandbox exchange (a client id and a client secret) and a sandbox member account to try it with. **Your sandbox credentials come with your STX invite**: the client id and secret, the sandbox host to use as `STX_BASE_URL`, and a sandbox member account.
+Every mode needs an STX client (a client id and a client secret) on a sandbox exchange, and a sandbox member account to try it with. They come with your STX invite, along with the sandbox host to use as `STX_BASE_URL`; the [ISV program](https://docs.stxapp.io/isv/) page says how to get one, and [Environments](https://docs.stxapp.io/environments/) lists the hosts.
 
-Tell us which redirect URIs to register on your client. STX matches them exactly, with no wildcards. Each mode's setup below says which it needs. All modes ask for the member scopes `profile.read balance.read portfolio.read orders.read orders.write` and the app scope `market_data`; `stx` mode also needs `openid`.
+Tell us which redirect URIs to register on your client; each mode's setup below says which it needs. STX matches them exactly. All modes ask for the member scopes `profile.read balance.read portfolio.read orders.read orders.write` and the app scope `market_data`; `stx` mode also needs `openid`. What each scope allows is on the [Scopes](https://docs.stxapp.io/oauth/scopes/) page.
 
 ## Set up and run a mode
 
@@ -198,135 +198,34 @@ All configuration comes from the environment; nothing host-specific is built in.
 | `APP_ID`, `APP_NAME`, `APP_TAGLINE`, `APP_BRAND_COLOR`, `APP_WALLET_CENTS` | all | optional: the app's name, look and starting wallet. `sideline` and `playbook` have their own logos |
 | `GA_MEASUREMENT_ID`, `GA_CONSENT_REQUIRED_REGIONS`, `GA_IGNORE_REFERRER_DOMAINS`, `GA_LINKED_DOMAINS` | all | optional: see [Analytics (optional)](#analytics-optional) |
 
-## Using the STX TypeScript SDK
+## The SDK, and where each step lives
 
-Every call the backend makes to STX goes through the STX TypeScript SDK,
-[`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript). The SDK reference is at
-<https://docs.stxapp.io/sdks/typescript/>; all the STX SDKs are listed at
-<https://docs.stxapp.io/sdks/>. The wiring lives in
-[`node-react/backend/src/stx.ts`](node-react/backend/src/stx.ts).
+Every call the backend makes to STX goes through the STX TypeScript SDK, [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript). Its guide and reference are at <https://docs.stxapp.io/sdks/typescript/>; this README does not repeat them.
 
 > **Alpha SDK.** Logging in with an STX account (`createConnect`) and the sign-in hints on `beginAuthorization` are in `0.9.0-alpha.1`, published on npm under the `alpha` tag (`npm install @stxapp/stx-typescript@alpha`). This repo pins that exact version. An alpha may change before release.
 
-**One OAuth client per app.** The app's credentials go into one `OAuthClient`
-from `@stxapp/stx-typescript/oauth`, built once and shared, so token refreshes
-are single-flight per member and the app token is minted once:
+[`docs/oauth-flow.md`](docs/oauth-flow.md) is the map from each step to the file that does it and the SDK call it uses. The short version:
 
-```ts
-import { OAuthClient } from "@stxapp/stx-typescript/oauth";
+| Step | Code | SDK call |
+| --- | --- | --- |
+| The app's STX client and its two stores | [`backend/src/stx.ts`](node-react/backend/src/stx.ts) | `new OAuthClient(...)` |
+| Link an STX account (`own`, `vendor`) | [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts) | `beginAuthorization`, `readCallback`, `redeemAuthorization` |
+| Register or log in with an STX account (`stx`) | [`backend/src/login/stx/index.ts`](node-react/backend/src/login/stx/index.ts) | `createConnect`, `connect.start`, `connect.finish` |
+| Act for the member | [`backend/src/routes/api.ts`](node-react/backend/src/routes/api.ts) | `oauth.memberClient(...)`, then `balance`, `placeOrder`, `cancelOrder`, `orders`, `fills`, `settlements` |
+| Live account data | [`backend/src/liveProxy.ts`](node-react/backend/src/liveProxy.ts) | `stx.websocket()`, `ws.accountView` |
+| Market data on the app's own token | [`backend/src/marketCatalog.ts`](node-react/backend/src/marketCatalog.ts), [`marketProxy.ts`](node-react/backend/src/marketProxy.ts) | `oauth.appClient("market_data")` |
+| Unlink | [`backend/src/routes/api.ts`](node-react/backend/src/routes/api.ts) | `oauth.unlink(...)` |
 
-const oauth = new OAuthClient({
-  baseUrl: process.env.STX_BASE_URL,
-  clientId: process.env.CLIENT_ID,
-  clientSecret: process.env.CLIENT_SECRET,
-  redirectUri: process.env.REDIRECT_URI,
-  scope: "profile.read balance.read portfolio.read orders.read orders.write",
-});
-```
+## What is specific to this demo app
 
-The SDK persists state through two small interfaces the app implements over
-its own database: a `TokenStore` (a member's tokens, keyed by the app's own
-user id) and a `PendingAuthorizationStore` (the PKCE verifier and `state`
-between the redirect and the callback). The app backs both with SQLite.
-
-**Linking a member** (modes `own` and `vendor`; `GET /login`, `GET /callback` in
-[`login/link.ts`](node-react/backend/src/login/link.ts)):
-
-```ts
-// /login: PKCE verifier + S256 challenge + state, stored; redirect to STX.
-// connection and loginHint are optional hints from your own login: go straight
-// to the sign-in method the user used with you, and preselect their account.
-const { url } = await oauth.beginAuthorization(pendingStore, {
-  data: { userId },
-  connection: "google",
-  loginHint: "jordan@example.com",
-});
-
-// /callback: check ?error and state (single use), then exchange the code.
-const callback = await readCallback(pendingStore, new URL(request.url));
-await oauth.redeemAuthorization(callback, { store: tokens, memberKey: userId });
-```
-
-**Registering or logging in with an STX account** (mode `stx`; `GET /auth/stx/start`, `GET /auth/stx/callback` in
-[`login/stx/index.ts`](node-react/backend/src/login/stx/index.ts)). `createConnect` reads STX's published sign-in configuration, and one round trip returns both who the member is and their trading tokens:
-
-```ts
-import { createConnect } from "@stxapp/stx-typescript/oauth";
-
-const connect = createConnect({
-  issuer: process.env.STX_BASE_URL,
-  clientId: process.env.CLIENT_ID,
-  clientSecret: process.env.CLIENT_SECRET,
-  redirectUri: process.env.STX_LOGIN_REDIRECT_URI,
-  scopes: "profile.read balance.read portfolio.read orders.read orders.write",
-});
-
-// /auth/stx/start: keep state, codeVerifier and nonce in your server session.
-const started = await connect.start({ connection: "google" }); // or no connection: STX's own page
-redirect(started.url);
-
-// /auth/stx/callback: exchanges the code and verifies the ID token.
-const { identity, tokens } = await connect.finish(callbackUrl, saved);
-identity.sub;      // the member's stable STX id for your app: key your user on it
-tokens.accessToken; // their trading tokens: store them server-side
-```
-
-**Acting for the member.** `oauth.memberClient(tokens, userId)` returns an
-`STX` client that attaches the member's bearer token, refreshes it before
-expiry and once on a `401`, and deletes the stored link when STX refuses the
-refresh (a revoked grant):
-
-```ts
-const stx = oauth.memberClient(tokens, userId);
-await stx.balance();
-await stx.placeOrder(marketId, "buy", "limit", { price: "0.40", quantity: "10" });
-await stx.cancelOrder(orderId);
-await stx.orders();
-await stx.fills();
-await stx.settlements();
-```
-
-**Market data on the app's own token.** `oauth.appClient("market_data")`
-returns an `STX` client on a `client_credentials` token, with no member
-involved. The app uses it for the catalog (`catalog.markets({ status, limit,
-cursor })`) and for the public market channels.
-
-**Live data over the WebSocket.** `stx.websocket()` returns an `STXWebSocket`
-authenticated as the member (or as the app, on the app client). For the member,
-`ws.accountView({ onChange })` joins the balance, orders, fills and positions
-topics and keeps one merged view of the account up to date. On the app client,
-the app joins `ws.ticker()`, `ws.orderbook(ids)`, `ws.trades({ marketIds })`,
-`ws.marketStats(ids)` and `ws.market(id)` (live scores). The SDK reconnects and
-rejoins after a drop. The backend relays all of it to the browser over
-Server-Sent Events, so the browser never opens an STX socket.
-
-**Typed errors.** STX's answers come back as exceptions the app can branch on:
-
-| Error | Raised when | What the app does |
-| ----- | ----------- | ------------------ |
-| `STXException` | STX answered with an error status | forwards STX's status and body to the browser |
-| `STXGrantRevokedException` (`/oauth`) | the member's grant is gone (refresh refused) | shows "not linked" so the member can link again |
-| `STXOAuthException` (`/oauth`) | the callback carries an error, or no code or state | ends the attempt with that error |
-| `STXAccessDeniedException`, `STXAccountPendingException` (`/oauth`) | the member cancelled at STX, or their STX account is still being set up | says so, and lets them try again |
-| `STXChannelException` | a channel join is refused (for example, a scope the grant lacks) | joins the topics it may and reports the rest |
-
-**Unlinking** is `oauth.unlink(tokens, userId)`: it revokes the grant at STX
-and deletes the stored tokens.
-
-The app's **API calls** page shows the SDK call behind every request, so a
-running app is also a live map of this section.
-
-## The integration model
-
-- **The app has its own wallet**, held in the demo's store (SQLite) and separate from any STX balance. Seeded via `APP_WALLET_CENTS`.
-- **One of the app's users, with STX tokens stored against them.** Every login mode ends the same way: a row in `users` on the browser's session, and the member's STX access and refresh tokens in `account_links` against that user. The browser only holds an opaque session cookie. Everything after sign-in is the same code in every mode.
-- **Who the user is.** `own` + `privy`: the Privy user id. `stx`: the member's stable STX id for your app. `vendor`: the login service's subject. `own` + `mock`: nobody, just the browser session. A user with an account behind them keeps their wallet and STX link across sign-outs and browsers.
-- **Dual wallet.** `App wallet` (held here) + `STX balance` (live from the member's STX socket, scope `balance.read`) = `Combined`. A total is shown only when the STX cash amount parses.
-- **Two deposits, kept apart.** The header's **Deposit** adds demo funds to the app's wallet (no payment). **Add funds** on the STX balance opens STX's own deposit page in a popup: members fund their STX account at STX.
-- **Popups, not redirects.** STX pages open in a popup on wide screens so the member stays on the app; phones get a full-page trip and come back. If the browser blocks the popup, the app asks once more (a fresh click gets past popup blockers) and only then offers to continue in the same tab.
-- **Scoped, money-safe.** The app asks only for the scopes it needs (`profile.read balance.read portfolio.read orders.read orders.write`). **No scope moves money**: deposits and withdrawals are never delegable.
-- **Tokens are refreshed server-side**, and encrypted at rest when `TOKEN_ENCRYPTION_KEY` is set. Keep that key: links stored under it cannot be read with a different one, so after a change those members read as not linked and link again. On expiry or a `401` the backend refreshes once and retries; a revoked grant ends the link cleanly.
-- **Unlink / revoke.** Unlinking revokes the grant at STX and drops it locally; the app's user and wallet remain, so they can link again.
+- **The app has its own wallet**, held in the demo's store (SQLite) and separate from any STX balance. Seeded via `APP_WALLET_CENTS`. The header's **Deposit** adds demo funds to it (no payment). **Add funds** on the STX balance opens STX's own deposit page: members fund their STX account at STX.
+- **Every mode ends the same way:** one of the app's users on the browser's session, and the member's STX tokens stored against that user. The browser only holds an opaque session cookie.
+- **Who the user is.** `own` + `privy`: the Privy user id. `stx`: the member's STX id for this app, at that exchange. `vendor`: the login service's id for them. `own` + `mock`: nobody, just the browser session. A user with an account behind them keeps their wallet and STX link across sign-outs and browsers.
+- **A new session at sign-in.** Signing in moves the browser to a session id made at that moment, and sign-out clears it.
+- **Popups, not redirects.** STX pages open in a popup on wide screens so the member stays on the app; phones get a full-page trip and come back. If the browser blocks the popup, the app asks once more and only then offers to continue in the same tab. A window closed without finishing leaves the app as it was.
+- **A member STX is still verifying.** Their calls answer `account_pending` and the app keeps their link; it works again once STX has verified them.
+- **Stored tokens** are encrypted at rest when `TOKEN_ENCRYPTION_KEY` is set. Keep that key: links stored under it cannot be read with a different one, so after a change those members read as not linked and link again.
+- **Unlink** revokes at STX and drops the link locally; the app's user and wallet remain, so they can link again.
 
 ## Live sports data
 
@@ -484,7 +383,7 @@ stx-isv-demo/
   README.md
   LICENSE
   .github/workflows/ci.yml    # typecheck, unit tests, build, and the end-to-end run of every login mode
-  docs/oauth-flow.md          # stack-agnostic flow: authorize, consent, callback, token, refresh, revoke
+  docs/oauth-flow.md          # where each step lives in the code, with links to the STX docs
   docs/oauth-flow-light.svg   # the link flow (light and dark versions)
   docs/oauth-flow-dark.svg
   node-react/

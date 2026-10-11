@@ -388,7 +388,7 @@ async function fullJourney(mode: Mode, browser: Browser, stx: MockStx, service: 
   if (home.status === 200) {
     const html = await home.text();
     const name = mode === "stx" ? "Playbook" : mode === "vendor" ? "Clubhouse" : "Sideline";
-    check(mode, `GET / serves the page as ${name}`, html.includes(`<title>${name}: STX sample app</title>`) && !html.includes("__PUBLIC_URL__"));
+    check(mode, `GET / serves the page as ${name}`, html.includes(`<title>${name}: STX demo app</title>`) && !html.includes("__PUBLIC_URL__"));
     if (mode === "stx") check(mode, "Playbook's own icons are used", html.includes("/assets/brand/playbook-icon.svg") && html.includes("/assets/brand/playbook/og-image.png"));
   } else if (process.env.E2E_EXPECT_FRONTEND === "1") {
     check(mode, "GET / serves the built frontend", false, `status ${home.status}`);

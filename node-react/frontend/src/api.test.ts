@@ -3,7 +3,7 @@ import { ApiError } from "./api";
 
 describe("what the person is told when a call fails", () => {
   test("the app's own sentence is shown, not its error code", () => {
-    const body = { error: "account_pending", message: "Your STX account is still being set up. Finish at STX, then try again." };
+    const body = { error: "account_pending", message: "STX is still verifying your account. Finish verifying your STX account, then try again." };
     expect(ApiError.describe(409, body)).toBe(body.message);
   });
 

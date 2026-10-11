@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "STX sample app (frontend). The app it presents (Sideline, Playbook) is fictional and used to demonstrate building on STX; it is not a real product or company.",
+  "description": "STX demo app (frontend). The app it presents (Sideline, Playbook) is fictional and used to demonstrate building on STX; it is not a real product or company.",
   "scripts": {
     "dev": "vite --host",
     "build": "tsc -b && vite build",

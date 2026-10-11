@@ -1,4 +1,4 @@
-# Single-container production image for the STX sample app.
+# Single-container production image for the STX demo app.
 #
 # Builds the Vite/React frontend to static assets, then runs the Bun backend
 # (the confidential OAuth client) which also serves those assets, so the whole

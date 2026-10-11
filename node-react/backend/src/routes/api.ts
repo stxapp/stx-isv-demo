@@ -40,7 +40,7 @@ async function forward(c: Context, call: () => Promise<unknown>): Promise<Respon
     // The member's STX account is still being verified: the link is kept (the
     // SDK keeps the tokens), and calls work once STX finishes.
     if (err instanceof STXAccountPendingException) {
-      return c.json({ error: "account_pending", message: "Your STX account is still being set up. Finish at STX, then try again." }, 409);
+      return c.json({ error: "account_pending", message: "STX is still verifying your account. Finish verifying your STX account, then try again." }, 409);
     }
     if (err instanceof STXGrantRevokedException) {
       throw new NotLinkedError("Your STX link was revoked. Link your STX account again.");
