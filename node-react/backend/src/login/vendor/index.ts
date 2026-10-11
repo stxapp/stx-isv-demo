@@ -26,7 +26,7 @@ import { config } from "../../config";
 import { getOrCreateSession, getSession, startSession } from "../../session";
 import { linkStore, SIGN_IN_FLOW_TTL_MS, signInFlowStore, userStore } from "../../stores";
 import { linkRoutes } from "../link";
-import { endLiveStreams, finishLink, identityKey, retireMockUser } from "../shared";
+import { endLiveStreams, finishLink, identityKey, retireSessionUser } from "../shared";
 import { displayName } from "../stx";
 
 let discovered: Promise<oidc.Configuration> | null = null;
@@ -140,7 +140,7 @@ export function vendorLoginRoutes(): Hono {
     if (!claims?.sub) return finishLink(c, "error=sign_in_failed");
     const email = typeof claims.email === "string" ? claims.email : undefined;
     const app = config.app;
-    await retireMockUser(app, flow.sessionId);
+    await retireSessionUser(app, flow.sessionId);
     const signedIn = userStore.signInExternal({
       sessionId: flow.sessionId,
       appId: app.id,

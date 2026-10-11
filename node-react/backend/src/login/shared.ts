@@ -78,12 +78,16 @@ export function identityKey(kind: "stx" | "vendor", issuer: string, sub: string)
   return `${kind}:${issuer.replace(/\/+$/, "")}|${sub}`;
 }
 
-// Before someone signs in on a browser that holds a mock user: that user is
-// about to be replaced (see userStore.signInExternal), so end its STX link
-// properly first: revoke at STX and close its live feed.
-export async function retireMockUser(app: AppProfile, sessionId: string): Promise<void> {
+// Before someone signs in on a browser: whoever is on it now is about to leave
+// it (see userStore.signInExternal). A mock user is about to be replaced, so
+// its STX link is ended properly: revoked at STX, its live feed closed. A user
+// with an account behind them keeps their link, but the live streams open for
+// them are ended, so this browser stops receiving their account.
+export async function retireSessionUser(app: AppProfile, sessionId: string): Promise<void> {
   const here = userStore.find(sessionId, app.id);
-  if (here && !here.externalId) await revokeAndDropLink(app, here);
+  if (!here) return;
+  if (here.externalId) await closeLiveFeed(app, here.id);
+  else await revokeAndDropLink(app, here);
 }
 
 // After a user is signed in on this browser, or signed out of it: end every

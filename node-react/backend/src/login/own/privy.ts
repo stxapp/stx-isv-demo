@@ -13,7 +13,7 @@ import { Hono } from "hono";
 import { config } from "../../config";
 import { publicUser } from "../../helpers";
 import { getOrCreateSession, startSession } from "../../session";
-import { endLiveStreams, retireMockUser } from "../shared";
+import { endLiveStreams, retireSessionUser } from "../shared";
 import { userStore } from "../../stores";
 
 export interface PrivyIdentity {
@@ -79,7 +79,7 @@ export function privyLoginRoutes(): Hono {
       return c.json({ error: "invalid_privy_token", message: "Your sign-in could not be verified. Sign in again." }, 401);
     }
     const sessionId = getOrCreateSession(c);
-    await retireMockUser(app, sessionId);
+    await retireSessionUser(app, sessionId);
     const signedIn = userStore.signInExternal({
       sessionId,
       appId: app.id,

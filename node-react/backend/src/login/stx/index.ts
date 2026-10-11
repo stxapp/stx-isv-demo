@@ -27,7 +27,7 @@ import { config } from "../../config";
 import { getOrCreateSession, getSession, startSession } from "../../session";
 import { activityStore, SIGN_IN_FLOW_TTL_MS, signInFlowStore, userStore } from "../../stores";
 import { stxApp } from "../../stx";
-import { connectHints, endLiveStreams, finishLink, identityKey, retireMockUser } from "../shared";
+import { connectHints, endLiveStreams, finishLink, identityKey, retireSessionUser } from "../shared";
 
 let connect: Connect | null = null;
 
@@ -105,7 +105,7 @@ export function stxLoginRoutes(): Hono {
 
     const { identity, tokens } = finished;
     const app = config.app;
-    await retireMockUser(app, flow.sessionId);
+    await retireSessionUser(app, flow.sessionId);
     const signedIn = userStore.signInExternal({
       sessionId: flow.sessionId,
       appId: app.id,

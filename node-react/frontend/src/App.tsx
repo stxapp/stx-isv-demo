@@ -260,7 +260,7 @@ export function App({ login = DEFAULT_LOGIN }: { login?: LoginInfo } = {}) {
   // one SSE stream for the whole app while signed in and linked. With it open,
   // trading refetches nothing: the panels update from the stream. Without it
   // (the feed failed), placements and cancels fall back to a refetch.
-  const liveAccount = useLiveAccountStream(Boolean(me?.user) && linked);
+  const liveAccount = useLiveAccountStream(Boolean(me?.user) && linked, me?.user?.id);
   const afterTrade = liveAccount.live ? () => {} : bump;
 
   // Opening the betslip (first market tapped) while linked checks the link.

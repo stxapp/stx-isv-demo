@@ -104,7 +104,9 @@ interface ChangeEvent {
   ts: number;
 }
 
-export function useLiveAccountStream(enabled: boolean): LiveAccount {
+// `userId` is whose account the stream is for: when it changes (someone else
+// signs in on this browser) the stream is closed and opened again.
+export function useLiveAccountStream(enabled: boolean, userId?: string): LiveAccount {
   const [state, setState] = useState<LiveAccount>(EMPTY);
   const seq = useRef(0);
 
@@ -185,7 +187,7 @@ export function useLiveAccountStream(enabled: boolean): LiveAccount {
       for (const k of KINDS) es.removeEventListener(k, onChange);
       es.close();
     };
-  }, [enabled]);
+  }, [enabled, userId]);
 
   return state;
 }

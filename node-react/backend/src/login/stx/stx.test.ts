@@ -325,6 +325,27 @@ describe("login mode stx", () => {
     expect(linkStore.get(mock.id)).toBeNull();
   });
 
+  test("when another member signs in on the same browser, the first member's live streams are ended", async () => {
+    const liveProxy = await import("../../liveProxy");
+    const a = await signIn({ sub: "member-stream-a", email: "sa@example.com" });
+    const first = userStore.find(a.sid, config.app.id)!;
+    const closed: string[] = [];
+    const { mock: fnMock } = await import("bun:test");
+    const original = liveProxy.closeLiveFeed;
+    await fnMock.module("../../liveProxy", () => ({
+      ...liveProxy,
+      closeLiveFeed: async (_app: unknown, userId: string) => void closed.push(userId),
+    }));
+    try {
+      const b = await signIn({ sub: "member-stream-b", email: "sb@example.com" }, a.cookie);
+      const second = userStore.find(b.sid, config.app.id)!;
+      // The member leaving the browser, then the one arriving (streams from other browsers).
+      expect(closed).toEqual([first.id, second.id]);
+    } finally {
+      await fnMock.module("../../liveProxy", () => ({ ...liveProxy, closeLiveFeed: original }));
+    }
+  });
+
   test("a different member on the same browser gets their own account", async () => {
     const a = await signIn({ sub: "member-a", email: "a@example.com" });
     const first = userStore.find(a.sid, config.app.id)!;
