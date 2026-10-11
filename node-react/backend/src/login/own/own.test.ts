@@ -184,22 +184,31 @@ describe("linking STX after Privy", () => {
 });
 
 describe("mock login", () => {
-  async function mockLogin(sid: string, name?: string) {
-    return mockApp.request("/api/login", {
+  // Signing in gives the browser a new session id; `sid` is that new one.
+  async function mockLogin(sentSid: string, name?: string) {
+    const res = await mockApp.request("/api/login", {
       method: "POST",
-      headers: { cookie: `isv_sid=${sid}`, "content-type": "application/json" },
+      headers: { cookie: `isv_sid=${sentSid}`, "content-type": "application/json" },
       body: JSON.stringify(name ? { name } : {}),
     });
+    const set = (res.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    return Object.assign(res, { sid: set ? set.split("=")[1]! : sentSid });
   }
 
   test("signs in a demo user with a wallet and no account behind it", async () => {
-    const sid = `s-${crypto.randomUUID()}`;
-    const res = await mockLogin(sid, "Riley");
+    const res = await mockLogin(`s-${crypto.randomUUID()}`, "Riley");
     expect(res.status).toBe(200);
-    const user = userStore.find(sid, "sideline")!;
+    const user = userStore.find(res.sid, "sideline")!;
     expect(user.name).toBe("Riley");
     expect(user.externalId).toBeNull();
     expect(user.walletCents).toBeGreaterThan(0);
+  });
+
+  test("signing in moves the browser to a new session id; the one it arrived with is signed in to nothing", async () => {
+    const res = await mockLogin("planted-by-someone-else");
+    expect(res.sid).not.toBe("planted-by-someone-else");
+    expect(userStore.find(res.sid, "sideline")).not.toBeNull();
+    expect(userStore.find("planted-by-someone-else", "sideline")).toBeNull();
   });
 
   test("the Privy route is off while the mock is the login", async () => {
@@ -207,7 +216,7 @@ describe("mock login", () => {
     expect(res.status).toBe(404);
   });
 
-  test("linking works before signing in: the visitor gets the demo user", async () => {
+  test("linking works before signing in: the visitor gets the demo user, under a session id issued then", async () => {
     const sid = `s-${crypto.randomUUID()}`;
     const res = await mockApp.request("/login", { headers: { cookie: `isv_sid=${sid}` } });
     expect(res.status).toBe(302);
@@ -215,12 +224,39 @@ describe("mock login", () => {
     expect(url.pathname).toBe("/oauth/authorize");
     // Linking asks for the trading scopes only: no ID token is needed.
     expect(url.searchParams.get("scope")).not.toContain("openid");
-    expect(userStore.find(sid, "sideline")).not.toBeNull();
+    const issued = (res.headers.get("set-cookie") ?? "").split(";")[0]!.split("=")[1]!;
+    expect(issued).not.toBe(sid);
+    expect(userStore.find(issued, "sideline")).not.toBeNull();
+    expect(userStore.find(sid, "sideline")).toBeNull();
+  });
+
+  test("a link is not made if the browser is no longer signed in as the user who started it", async () => {
+    const { sid } = await mockLogin(`s-${crypto.randomUUID()}`);
+    const uid = userStore.find(sid, "sideline")!.id;
+    const start = await mockApp.request("/login", { headers: { cookie: `isv_sid=${sid}` } });
+    const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+
+    // The STX window comes back to a browser that now holds another session.
+    const realFetch = globalThis.fetch;
+    let exchanged = 0;
+    globalThis.fetch = (async () => {
+      exchanged++;
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      const page = await (
+        await mockApp.request(`/callback?code=c&state=${state}`, { headers: { cookie: `isv_sid=s-${crypto.randomUUID()}` } })
+      ).text();
+      expect(page).toContain("session_mismatch");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(exchanged).toBe(0);
+    expect(linkStore.get(uid)).toBeNull();
   });
 
   test("signing out removes the mock user entirely", async () => {
-    const sid = `s-${crypto.randomUUID()}`;
-    await mockLogin(sid);
+    const { sid } = await mockLogin(`s-${crypto.randomUUID()}`);
     const uid = userStore.find(sid, "sideline")!.id;
     await mockApp.request("/api/signout", { method: "POST", headers: { cookie: `isv_sid=${sid}` } });
     expect(userStore.get(uid)).toBeNull();

@@ -5,7 +5,7 @@
 import { Hono } from "hono";
 import { config } from "../../config";
 import { publicUser } from "../../helpers";
-import { getOrCreateSession } from "../../session";
+import { getOrCreateSession, startSession } from "../../session";
 import { userStore } from "../../stores";
 
 export function mockLoginRoutes(): Hono {
@@ -17,12 +17,14 @@ export function mockLoginRoutes(): Hono {
     const app = config.app;
     const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
     const name = typeof body.name === "string" && body.name.trim() !== "" ? body.name.trim() : `${app.name} demo user`;
-    const user = userStore.ensure({
+    const signedIn = userStore.ensure({
       sessionId: getOrCreateSession(c),
       appId: app.id,
       name,
       startingWalletCents: app.startingWalletCents,
     });
+    // Signed in: from here on the browser uses a session id made just now.
+    const user = userStore.moveToSession(signedIn.id, startSession(c));
     return c.json({ user: publicUser(user) });
   });
 

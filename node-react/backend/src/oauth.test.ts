@@ -402,6 +402,10 @@ describe("a dead link reads as not linked", () => {
     const res = await authRoutes.request("/login", { headers: { cookie: `isv_sid=${sid}` } });
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toStartWith("https://stx.example.com/oauth/authorize?");
-    expect(userStore.find(sid, "sideline")?.name).toBe("Sideline demo user");
+    // The demo user is made under a session id issued now, not the one sent.
+    const issued = (res.headers.get("set-cookie") ?? "").split(";")[0]!.split("=")[1]!;
+    expect(issued).not.toBe(sid);
+    expect(userStore.find(issued, "sideline")?.name).toBe("Sideline demo user");
+    expect(userStore.find(sid, "sideline")).toBeNull();
   });
 });

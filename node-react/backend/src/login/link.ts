@@ -10,7 +10,7 @@ import { readCallback, STXOAuthException, type ReadCallback } from "@stxapp/stx-
 import { buildDetail } from "../activityDetail";
 import { config, getApp } from "../config";
 import { appFromRequest } from "../helpers";
-import { getOrCreateSession } from "../session";
+import { getOrCreateSession, getSession, startSession } from "../session";
 import { sdkCalls } from "../sdkCall";
 import { activityStore, userStore } from "../stores";
 import { pendingStore, stxApp, type FlowData } from "../stx";
@@ -34,11 +34,13 @@ export function linkRoutes(opts: LinkOptions): Hono {
     const app = appFromRequest(c);
     if (!app) return finishLink(c, "error=unknown_app");
 
-    const sessionId = getOrCreateSession(c);
-
     // Linking attaches the STX grant to one of the app's users.
-    const signedIn = userStore.find(sessionId, app.id);
+    const existing = getOrCreateSession(c);
+    const signedIn = userStore.find(existing, app.id);
     if (opts.requireSignedIn && !signedIn) return finishLink(c, "error=not_signed_in");
+    // A visitor who is made a demo user here gets a session id made now, never
+    // one their browser arrived with.
+    const sessionId = signedIn ? existing : startSession(c);
     const user =
       signedIn ??
       userStore.ensure({
@@ -94,6 +96,10 @@ export function linkRoutes(opts: LinkOptions): Hono {
       // The app was reconfigured away or the user signed out mid-flow.
       return finishLink(c, "error=link_target_gone");
     }
+    // The grant goes to the user this browser is signed in as right now. If
+    // they signed out or switched accounts while the STX window was open, the
+    // link is not made.
+    if (user.sessionId !== getSession(c)) return finishLink(c, "error=session_mismatch");
 
     // Exchange the code (proving PKCE) with the flow's app client and store the
     // tokens against the flow's user (account linking).
