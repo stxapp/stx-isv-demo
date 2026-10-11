@@ -7,6 +7,7 @@ This page maps each step of working with a member's STX account to the file in t
 - [Scopes](https://docs.stxapp.io/oauth/scopes/): what an app can ask for. No scope moves money
 - [Tokens and security](https://docs.stxapp.io/oauth/tokens-and-security/): lifetimes, refresh, rotation, revocation
 - [Discovery and errors](https://docs.stxapp.io/oauth/discovery-and-errors/): published configuration and the errors an app sees
+- [Members still being verified](https://docs.stxapp.io/oauth/members-being-verified/): what an app sees, and should do, while STX verifies a member
 - [Environments](https://docs.stxapp.io/environments/): the hosts to use
 
 All paths below are under `node-react/backend/src/`.
@@ -21,6 +22,8 @@ The app's STX client is one `OAuthClient`, built once in [`stx.ts`](../node-reac
 
 ## Link an STX account (login modes `own` and `vendor`)
 
+The guide: [You have an app with its own accounts](https://docs.stxapp.io/oauth/connect-your-stx-account/).
+
 | Step | Route | Code | SDK call |
 | --- | --- | --- | --- |
 | Send the member to STX | `GET /login` | [`login/link.ts`](../node-react/backend/src/login/link.ts) | `oauth.beginAuthorization(pendingStore, { data, connection, loginHint })` |
@@ -32,6 +35,8 @@ The app's STX client is one `OAuthClient`, built once in [`stx.ts`](../node-reac
 
 ## Register or log in with an STX account (login mode `stx`)
 
+The guide: [You're building a new app with no login yet](https://docs.stxapp.io/oauth/sign-in-with-your-stx-account/).
+
 | Step | Route | Code | SDK call |
 | --- | --- | --- | --- |
 | Send the person to STX | `GET /auth/stx/start` | [`login/stx/index.ts`](../node-react/backend/src/login/stx/index.ts) | `connect.start({ connection, loginHint })` |
@@ -42,6 +47,8 @@ The app's STX client is one `OAuthClient`, built once in [`stx.ts`](../node-reac
 `connect` is `createConnect({ issuer, clientId, clientSecret, redirectUri, scopes })`. What is kept between the two requests (state, PKCE verifier, nonce, and the browser session that started it) is in the `signin_flows` table ([`stores.ts`](../node-react/backend/src/stores.ts)).
 
 ## A login service that offers STX (login mode `vendor`)
+
+The guide: [You use a login service like Auth0 or Clerk](https://docs.stxapp.io/oauth/sign-in-with-your-stx-account/login-vendor/).
 
 | Step | Route | Code | Library |
 | --- | --- | --- | --- |
