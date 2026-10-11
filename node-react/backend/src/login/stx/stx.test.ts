@@ -282,8 +282,13 @@ describe("login mode stx", () => {
       const sid = `s-${crypto.randomUUID()}`;
       const old = userStore.ensure({ sessionId: sid, appId: config.app.id, name: "From Playbook", startingWalletCents: 777 });
       db.query(`UPDATE users SET stx_sub = 'member-old', session_id = 'signed-out:x' WHERE id = $id`).run({ $id: old.id });
+      // A second row with the same member id, as an old database could hold.
+      const twin = userStore.ensure({ sessionId: `s-${crypto.randomUUID()}`, appId: config.app.id, name: "Twin", startingWalletCents: 1 });
+      db.query(`UPDATE users SET stx_sub = 'member-old' WHERE id = $id`).run({ $id: twin.id });
+      // The earlier row gets the key; the twin is left alone and nothing throws.
       expect(adoptPlaybookUsers(stx.url)).toBe(1);
-      expect(adoptPlaybookUsers(stx.url)).toBe(0); // once only
+      expect(userStore.get(old.id)?.externalId).toBe(`stx:${stx.url}|member-old`);
+      expect(userStore.get(twin.id)?.externalId).toBeNull();
 
       const { sid: now } = await signIn({ sub: "member-old", email: "old@example.com" });
       const user = userStore.find(now, config.app.id)!;

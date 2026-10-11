@@ -144,7 +144,10 @@ export function adoptPlaybookUsers(issuer: string): number {
   const columns = db.query(`PRAGMA table_info(users)`).all() as { name: string }[];
   if (!columns.some((c) => c.name === "stx_sub")) return 0;
   const { changes } = db
-    .query(`UPDATE users SET external_id = $prefix || stx_sub WHERE stx_sub IS NOT NULL AND external_id IS NULL`)
+    // OR IGNORE: should two rows carry the same member id, the earlier one gets
+    // the key and the later one is left as it is (stored, never looked up),
+    // rather than stopping the app from starting.
+    .query(`UPDATE OR IGNORE users SET external_id = $prefix || stx_sub WHERE stx_sub IS NOT NULL AND external_id IS NULL`)
     .run({ $prefix: `stx:${issuer.replace(/\/+$/, "")}|` });
   if (changes > 0) console.log(`Carried over ${changes} Playbook user(s).`);
   return changes;
