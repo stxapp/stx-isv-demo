@@ -19,11 +19,11 @@ Set `LOGIN_MODE` and the same code becomes a different demo app. Each mode's cod
 
 | `LOGIN_MODE` | Your situation, and what your users do | Demo app | Files to read |
 | --- | --- | --- | --- |
-| `own` | **You have an app with its own accounts.** Your users log in to your app as they do today, then link their STX account once. `OWN_LOGIN` picks the login this demo uses: `privy` or `mock`. | [Sideline demo app](https://sideline.sportsxapp.com) | [`backend/src/login/own/`](node-react/backend/src/login/own/), [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts), [`frontend/src/login/own/`](node-react/frontend/src/login/own/) |
-| `stx` | **You're building a new app with no login yet.** People register or log in with their STX account. | [Playbook demo app](https://playbook.sportsxapp.com) | [`backend/src/login/stx/`](node-react/backend/src/login/stx/), [`frontend/src/login/stx/`](node-react/frontend/src/login/stx/) |
-| `vendor` | **You use a login service like Auth0 or Clerk.** Keep your login and link STX accounts (that is `own`), or add STX as a login option in the service: your users choose STX on your login screen, next to Google or Apple. This mode is the second. | Not deployed yet | [`backend/src/login/vendor/`](node-react/backend/src/login/vendor/), [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts), [`frontend/src/login/vendor/`](node-react/frontend/src/login/vendor/) |
+| `own` | **[You have an app with its own accounts](https://docs.stxapp.io/oauth/connect-your-stx-account/).** Your users log in to your app as they do today, then link their STX account once. `OWN_LOGIN` picks the login this demo uses: `privy` or `mock`. | [Sideline demo app](https://sideline.sportsxapp.com) | [`backend/src/login/own/`](node-react/backend/src/login/own/), [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts), [`frontend/src/login/own/`](node-react/frontend/src/login/own/) |
+| `stx` | **[You're building a new app with no login yet](https://docs.stxapp.io/oauth/sign-in-with-your-stx-account/).** People register or log in with their STX account. | [Playbook demo app](https://playbook.sportsxapp.com) | [`backend/src/login/stx/`](node-react/backend/src/login/stx/), [`frontend/src/login/stx/`](node-react/frontend/src/login/stx/) |
+| `vendor` | **[You use a login service like Auth0 or Clerk](https://docs.stxapp.io/oauth/sign-in-with-your-stx-account/login-vendor/).** Keep your login and link STX accounts (that is `own`), or add STX as a login option in the service: your users choose STX on your login screen, next to Google or Apple. This mode is the second. | Not deployed yet | [`backend/src/login/vendor/`](node-react/backend/src/login/vendor/), [`backend/src/login/link.ts`](node-react/backend/src/login/link.ts), [`frontend/src/login/vendor/`](node-react/frontend/src/login/vendor/) |
 
-The three situations, their titles and the one line under each are the ones the [STX docs](https://docs.stxapp.io/oauth/) start from.
+The three situations, their titles and the one line under each are the ones the [STX docs](https://docs.stxapp.io/oauth/) start from. Each title links its guide there.
 
 **About Privy in `own` mode.** Privy is only what this demo happens to use for a real login. It is not a requirement and STX has no relationship to it. The app's login and the STX link are two separate steps: your login decides which of your users is making the request, and the link step attaches an STX grant to that user. Any login system works the same way (your own passwords, sessions from your framework, passkeys, a single sign-on product). To use yours, replace the one route in [`login/own/privy.ts`](node-react/backend/src/login/own/privy.ts) that turns a login into "this request is from user X"; [`login/link.ts`](node-react/backend/src/login/link.ts) does not change. `OWN_LOGIN=mock` is that same shape with no login at all, so the demo runs with nothing but STX credentials.
 
@@ -63,7 +63,7 @@ In `.env`, set `STX_BASE_URL`, `CLIENT_ID` and `CLIENT_SECRET` from your STX inv
 
 ### You have an app with its own accounts (`own`)
 
-Your users log in to your app as they do today, then link their STX account once.
+Your users log in to your app as they do today, then link their STX account once. The guide for this situation, with what the member sees and each step, is [You have an app with its own accounts](https://docs.stxapp.io/oauth/connect-your-stx-account/); below is how to run it in this demo app.
 
 **Register with STX:** the redirect URI `http://localhost:8787/callback` on your client (deployed: `<PUBLIC_URL>/callback`).
 
@@ -99,7 +99,7 @@ REDIRECT_URI=http://localhost:8787/callback
 
 ### You're building a new app with no login yet (`stx`)
 
-People register or log in with their STX account. One step logs them in to your app and links their account.
+People register or log in with their STX account. One step logs them in to your app and links their account. The guide for this situation is [You're building a new app with no login yet](https://docs.stxapp.io/oauth/sign-in-with-your-stx-account/); below is how to run it in this demo app.
 
 **Register with STX:** the redirect URI `http://localhost:8787/auth/stx/callback` on your client (deployed: `<PUBLIC_URL>/auth/stx/callback`), and the `openid` scope.
 
@@ -122,7 +122,7 @@ APP_NAME=Playbook
 
 ### You use a login service like Auth0 or Clerk (`vendor`)
 
-If your app's login runs on a service such as Auth0, Clerk, Okta or Amazon Cognito, you have two choices:
+The guide for this situation is [You use a login service like Auth0 or Clerk](https://docs.stxapp.io/oauth/sign-in-with-your-stx-account/login-vendor/). If your app's login runs on a service such as Auth0, Clerk, Okta or Amazon Cognito, you have two choices:
 
 | | Keep your login, link STX accounts | Add STX as a login option in the service |
 | --- | --- | --- |
@@ -240,7 +240,7 @@ Every call the backend makes to STX goes through the STX TypeScript SDK, [`@stxa
 - **Who the user is.** `own` + `privy`: the Privy user id. `stx`: the member's STX id for this app, at that exchange. `vendor`: the login service's id for them. `own` + `mock`: nobody, just the browser session. A user with an account behind them keeps their wallet and STX link across sign-outs and browsers.
 - **A new session at sign-in.** Signing in moves the browser to a session id made at that moment, and sign-out clears it.
 - **Popups, not redirects.** STX pages open in a popup on wide screens so the member stays on the app; phones get a full-page trip and come back. If the browser blocks the popup, the app asks once more and only then offers to continue in the same tab. A window closed without finishing leaves the app as it was.
-- **A member STX is still verifying.** Their calls answer `account_pending` and the app keeps their link; it works again once STX has verified them.
+- **A member STX is still verifying.** Their calls answer `account_pending` and the app keeps their link; it works again once STX has verified them. What STX answers at each step is in [Members still being verified](https://docs.stxapp.io/oauth/members-being-verified/).
 - **Stored tokens** are encrypted at rest when `TOKEN_ENCRYPTION_KEY` is set. Keep that key: links stored under it cannot be read with a different one, so after a change those members read as not linked and link again.
 - **Unlink** revokes at STX and drops the link locally; the app's user and wallet remain, so they can link again.
 
