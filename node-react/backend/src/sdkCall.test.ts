@@ -9,6 +9,7 @@
 
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { allActivity } from "../test-support/activityRows";
 
 process.env.STX_BASE_URL = "https://stx.example.com";
 process.env.CLIENT_ID = "sideline-test-client-id";
@@ -113,7 +114,7 @@ function linkedUser(access: string, expiresAt: number | null = null): string {
 
 // Oldest first, as the panel reads bottom-up.
 function rows() {
-  return activityStore.list(50, "sideline").reverse();
+  return allActivity(db, "sideline", 50).reverse();
 }
 
 beforeEach(() => {

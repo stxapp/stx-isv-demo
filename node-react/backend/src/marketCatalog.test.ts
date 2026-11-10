@@ -119,73 +119,111 @@ describe("CatalogCache", () => {
   });
   const failed = (n = 0): CatalogResult => ({ ...ok(n), status: 502 });
 
-  // A cache over a scripted list of fetch results and a hand-moved clock.
+  // A cache over a scripted list of fetch results and a hand-moved clock; each
+  // fetch it makes is recorded in `fetched`, as the activity log would.
   function scripted(results: CatalogResult[]) {
     const clock = { t: 0 };
     let calls = 0;
-    const cache = new CatalogCache(async () => results[Math.min(calls++, results.length - 1)]!, 60_000, () => clock.t);
-    return { cache, clock, calls: () => calls };
+    const fetched: CatalogResult[] = [];
+    const cache = new CatalogCache(
+      async () => results[Math.min(calls++, results.length - 1)]!,
+      60_000,
+      () => clock.t,
+      (f) => fetched.push(f),
+    );
+    return { cache, clock, calls: () => calls, fetched };
   }
+  // Let a background refetch finish.
+  const settle = () => new Promise((r) => setTimeout(r, 0));
 
   test("serves the cached catalog within the TTL without refetching", async () => {
-    const { cache, clock, calls } = scripted([ok(3), ok(5)]);
-    const first = await cache.get();
-    expect(first.fetched?.markets).toHaveLength(3);
+    const { cache, clock, calls, fetched } = scripted([ok(3), ok(5)]);
+    expect((await cache.get()).result.markets).toHaveLength(3);
     clock.t = 59_999;
-    const second = await cache.get();
-    expect(second.result.markets).toHaveLength(3);
-    expect(second.fetched).toBeUndefined();
+    expect((await cache.get()).result.markets).toHaveLength(3);
     expect(calls()).toBe(1);
+    expect(fetched).toHaveLength(1);
   });
 
-  test("refetches once the TTL has passed", async () => {
-    const { cache, clock, calls } = scripted([ok(3), ok(5)]);
-    await cache.get();
-    clock.t = 60_000;
-    const r = await cache.get();
-    expect(r.result.markets).toHaveLength(5);
-    expect(r.fetched?.markets).toHaveLength(5);
-    expect(calls()).toBe(2);
-  });
-
-  test("concurrent requests share one fetch, and only the first logs it", async () => {
+  test("past the TTL it answers at once with the cached catalog and refetches in the background", async () => {
     let release!: (r: CatalogResult) => void;
     let calls = 0;
-    const cache = new CatalogCache(() => {
-      calls++;
-      return new Promise<CatalogResult>((res) => (release = res));
-    });
+    const clock = { t: 0 };
+    const cache = new CatalogCache(
+      () => (calls++ === 0 ? Promise.resolve(ok(3)) : new Promise<CatalogResult>((res) => (release = res))),
+      60_000,
+      () => clock.t,
+    );
+    await cache.get();
+    clock.t = 60_000;
+    // The refetch is still running, yet the request is answered.
+    const r = await cache.get();
+    expect(r.result.markets).toHaveLength(3);
+    expect(calls).toBe(2);
+    // A second request meanwhile does not start another fetch.
+    await cache.get();
+    expect(calls).toBe(2);
+    release(ok(5));
+    await settle();
+    expect((await cache.get()).result.markets).toHaveLength(5);
+  });
+
+  test("concurrent first requests share one fetch, logged once", async () => {
+    let release!: (r: CatalogResult) => void;
+    let calls = 0;
+    const fetched: CatalogResult[] = [];
+    const cache = new CatalogCache(
+      () => {
+        calls++;
+        return new Promise<CatalogResult>((res) => (release = res));
+      },
+      60_000,
+      Date.now,
+      (f) => fetched.push(f),
+    );
     const a = cache.get();
     const b = cache.get();
     release(ok(4));
     const [ra, rb] = await Promise.all([a, b]);
     expect(calls).toBe(1);
-    expect(ra.fetched?.markets).toHaveLength(4);
-    expect(rb.fetched).toBeUndefined();
+    expect(fetched).toHaveLength(1);
+    expect(ra.result.markets).toHaveLength(4);
     expect(rb.result.markets).toHaveLength(4);
   });
 
-  test("a failed refetch serves the last good catalog as stale and retries next time", async () => {
-    const { cache, clock, calls } = scripted([ok(3), failed(200), ok(6)]);
+  test("a failed background refetch keeps serving the last good catalog, marked stale, and the next one retries", async () => {
+    const { cache, clock, calls, fetched } = scripted([ok(3), failed(200), ok(6)]);
     await cache.get();
     clock.t = 60_000;
-    const stale = await cache.get();
+    await cache.get(); // starts the refetch that fails
+    await settle();
+    const stale = await cache.get(); // still past the TTL: starts another
     expect(stale.stale).toBe(true);
     expect(stale.result.markets).toHaveLength(3);
-    expect(stale.fetched?.status).toBe(502);
+    await settle();
+    expect(fetched.map((f) => f.status)).toEqual([200, 502, 200]);
     const retried = await cache.get();
     expect(retried.result.markets).toHaveLength(6);
     expect(retried.stale).toBe(false);
     expect(calls()).toBe(3);
   });
 
-  test("a failed fetch with nothing cached is served as is but not cached", async () => {
+  test("a failed fetch with nothing cached is served as is, unencoded and not cached", async () => {
     const { cache, calls } = scripted([failed(400), ok(2)]);
     const r = await cache.get();
     expect(r.result.status).toBe(502);
     expect(r.result.markets).toHaveLength(400);
+    expect(r.body).toBeUndefined();
     expect(r.stale).toBe(false);
     expect((await cache.get()).result.markets).toHaveLength(2);
     expect(calls()).toBe(2);
+  });
+
+  test("a complete catalog is encoded once: the JSON the route sends, and its gzip", async () => {
+    const { cache } = scripted([ok(3)]);
+    const { body } = await cache.get();
+    expect(JSON.parse(body!.json)).toEqual({ markets: ok(3).markets, truncated: false });
+    expect(new TextDecoder().decode(Bun.gunzipSync(body!.gzip as Uint8Array<ArrayBuffer>))).toBe(body!.json);
+    expect((await cache.get()).body).toBe(body);
   });
 });

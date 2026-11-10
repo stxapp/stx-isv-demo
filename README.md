@@ -11,7 +11,7 @@ Both are this one codebase, a small sports demo app built on the STX Exchange, r
 
 Once someone is in, the demo app is the same in every mode. It reads the member's balance, positions and orders, places and cancels orders from a betslip, streams their live account data, shows public market data on the app's own token, and unlinks on request. It never holds STX funds, no scope can move money, and the browser never sees an STX token.
 
-This repo is the demo, not the manual. How working with a member's STX account works (the flow, scopes, tokens, errors) is in the [STX docs](https://docs.stxapp.io/oauth/). What is here is what is specific to this app: the modes, how to set up and run each, its settings, its tests, and where in the code each step lives. Every call the backend makes to STX is also listed on the running app's **API calls** page, with the SDK call behind it and a redacted request and response.
+This repo is the demo, not the manual. How working with a member's STX account works (the flow, scopes, tokens, errors) is in the [STX docs](https://docs.stxapp.io/oauth/). What is here is what is specific to this app: the modes, how to set up and run each, its settings, its tests, and where in the code each step lives. Every call the backend makes to STX is also listed on the running app's **API calls** page, with the SDK call behind it and a redacted request and response: the app's own calls to everyone, and a member's calls only to that member.
 
 ## Login modes
 
@@ -320,7 +320,7 @@ The same in every mode:
 | `GET /api/markets` | the public market catalog |
 | `GET /api/markets/:id/trades` | a market's recent public trades (its `recent_trades`), which seed the trades tape and price chart; the `trades` channel only pushes new trades |
 | `GET /api/market-stream?topic=` | SSE: `ticker`, `orderbook`, `trades`, `market_stats`, or `market` (live scores) |
-| `GET /api/activity`, `GET /api/activity/:id/detail` | the API calls log and one call's redacted detail |
+| `GET /api/activity`, `GET /api/activity/:id/detail` | the API calls log (the app's calls, plus the signed-in member's own) and one call's redacted detail |
 
 Per login mode. A route that is not part of the running mode answers `404`:
 

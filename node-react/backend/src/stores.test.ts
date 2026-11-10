@@ -9,6 +9,8 @@
 // at import time, so the required vars (and DB_PATH=:memory:) are set first.
 
 import { beforeEach, describe, expect, test } from "bun:test";
+import { allActivity } from "../test-support/activityRows";
+import { UNKNOWN_MEMBER } from "./memberContext";
 
 // The `config` singleton is built once per test process and shared across test
 // files, so this env block is identical to the one in oauth.test.ts: whichever
@@ -156,11 +158,24 @@ describe("activityStore: the request log", () => {
     activityStore.record({ ts: 2, appId: "oldapp", method: "GET", path: "/b", status: 200, note: null });
     activityStore.record({ ts: 3, appId: "sideline", method: "POST", path: "/c", status: 201, note: null });
 
-    const sidelineOnly = activityStore.list(100, "sideline");
+    const sidelineOnly = activityStore.list(100, { userId: null, appId: "sideline" });
     expect(sidelineOnly.map((r) => r.path)).toEqual(["/c", "/a"]);
+    expect(activityStore.list(100, { userId: null })).toHaveLength(3);
+  });
 
-    const all = activityStore.list(100);
-    expect(all.length).toBe(3);
+  test("a viewer sees app-level rows and their own member rows, never another member's", () => {
+    const row = (path: string, userId: string | null) =>
+      activityStore.record({ ts: 1, appId: "sideline", method: "GET", path, status: 200, note: null, userId });
+    row("/app", null);
+    row("/mine", "user-a");
+    row("/theirs", "user-b");
+    row("/unknown", UNKNOWN_MEMBER);
+
+    const paths = (userId: string | null) =>
+      activityStore.list(100, { userId, appId: "sideline" }).map((r) => r.path);
+    expect(paths(null)).toEqual(["/app"]);
+    expect(paths("user-a")).toEqual(["/mine", "/app"]);
+    expect(paths("user-b")).toEqual(["/theirs", "/app"]);
   });
 });
 
@@ -214,7 +229,7 @@ describe("adoptRetiredAppRows: members keep their rows when the app id changes",
     expect(link?.appId).toBe("sideline");
     expect(link?.accessToken).toBe("stx_at_A");
     expect(flowStore.take("state-1")?.appId).toBe("sideline");
-    expect(activityStore.list(10, "sideline")).toHaveLength(1);
+    expect(allActivity(db, "sideline", 10)).toHaveLength(1);
     // Idempotent: a second boot finds nothing retired.
     expect(adoptRetiredAppRows("sideline")).toEqual({ from: [], to: null });
   });

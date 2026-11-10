@@ -18,6 +18,7 @@ import { buildDetail } from "../activityDetail";
 import { config, type AppProfile } from "../config";
 import { appFromRequest, centsToDollarString, extractStxCashCents, publicUser } from "../helpers";
 import { clearSession, getSession } from "../session";
+import { asMember } from "../memberContext";
 import { publicLogin, signOutUrl } from "../login";
 import { activityStore, linkStore, userStore, type AccountLink, type User } from "../stores";
 import { MARKET_DATA_SCOPE, memberClient, NotLinkedError, stxApp, stxErrorResponse, type SdkCall } from "../stx";
@@ -463,11 +464,32 @@ apiRoutes.get("/stream", (c) => {
 // an app token (client_credentials, scope market_data), walks STX's REST
 // `GET /api/v1/markets` to the last page with the SDK's `iterMarkets`, and
 // reshapes it into the catalog shape the frontend consumes. The result is
-// cached per app for CATALOG_TTL_MS, so only a real fetch is logged.
+// cached per app and refreshed in the background (see CatalogCache), and sent
+// gzipped when the browser accepts it. Each real fetch is logged.
 apiRoutes.get("/markets", async (c) => {
   const app = requireApp(c);
-  const { result, fetched, stale } = await catalogCacheFor(app).get();
-  if (fetched) {
+  const { result, body, stale } = await marketCatalog(app).get();
+  if (!body) {
+    if (result.status !== 200 && result.markets.length === 0) {
+      return c.json({ error: "catalog_unavailable", markets: [] }, (result.status || 502) as never);
+    }
+    return c.json({ markets: result.markets, truncated: result.truncated });
+  }
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json; charset=utf-8",
+    Vary: "Accept-Encoding",
+    "Cache-Control": "no-store",
+  };
+  if (stale) headers["X-Catalog-Stale"] = "1";
+  if (/\bgzip\b/.test(c.req.header("accept-encoding") ?? "")) {
+    return new Response(body.gzip, { headers: { ...headers, "Content-Encoding": "gzip" } });
+  }
+  return new Response(body.json, { headers });
+});
+
+// The app's catalog cache, logging each fetch it makes as an activity row.
+function marketCatalog(app: AppProfile) {
+  return catalogCacheFor(app, (fetched) => {
     const ok = fetched.status === 200;
     const loaded = `${fetched.markets.length} open markets in ${fetched.pages} ${fetched.pages === 1 ? "page" : "pages"}`;
     activityStore.record({
@@ -486,12 +508,15 @@ apiRoutes.get("/markets", async (c) => {
         summary: `${loaded}${fetched.truncated ? " (stopped at the cap)" : ""} (first page shown)`,
       }),
     });
-  }
-  if (result.status !== 200 && result.markets.length === 0) {
-    return c.json({ error: "catalog_unavailable", markets: [] }, (result.status || 502) as never);
-  }
-  return c.json({ markets: result.markets, stale, truncated: result.truncated });
-});
+  });
+}
+
+// Fetch the app's catalog at boot, so the first visitor does not wait for it.
+export function warmMarketCatalog(app: AppProfile): void {
+  marketCatalog(app)
+    .refresh()
+    .catch((err) => console.error("market catalog warm-up failed", err));
+}
 
 // GET /api/markets/:id/trades?app=<id> -> the market's recent public trades
 // (the last 15, newest first), in the `trades` channel's row shape. The live
@@ -570,11 +595,14 @@ apiRoutes.get("/market-stream", (c) => {
 });
 
 // GET /api/activity?app=<id>&limit= -> the request log powering the activity
-// panel. Without ?app it returns every row.
+// panel: the app's own calls, plus the calls made for the signed-in member.
+// Another member's rows are never listed.
 apiRoutes.get("/activity", (c) => {
-  const limit = Math.min(Number(c.req.query("limit") ?? 100), 500);
-  const appId = c.req.query("app");
-  return c.json({ activity: activityStore.list(limit, appId || undefined) });
+  const app = requireApp(c);
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 100) || 100, 1), 500);
+  const sid = getSession(c);
+  const viewer = sid ? userStore.find(sid, app.id) : null;
+  return c.json({ activity: activityStore.list(limit, { userId: viewer?.id ?? null, appId: app.id }) });
 });
 
 // GET /api/activity/:id/detail -> the redacted request and response behind one
@@ -623,7 +651,7 @@ export async function revokeAndDropLink(app: AppProfile, user: User): Promise<vo
   // The SDK revokes the refresh token (which kills the pair) and deletes the
   // link whether or not STX answered.
   const { oauth, tokens } = stxApp(app);
-  await oauth.unlink(tokens, user.id);
+  await asMember(user.id, () => oauth.unlink(tokens, user.id));
   await closeLiveFeed(app, user.id);
 }
 
