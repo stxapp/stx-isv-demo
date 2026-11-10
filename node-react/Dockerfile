@@ -8,15 +8,17 @@
 # runtime env, so one image runs on any host, as any of the demo apps.
 
 # --- Stage 1: build the frontend ---
-FROM node:20-alpine AS frontend
+# Installed from the committed bun.lock, as CI's build does: an unpinned install
+# picks up newer releases, and a newer @privy-io/react-auth no longer bundles.
+FROM oven/bun:1.4.2-slim AS frontend
 WORKDIR /fe
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile
 COPY frontend/ ./
 # Same-origin: the browser calls the backend relatively (""). The exchange's
 # public address reaches the browser at runtime from GET /api/app.
 ENV VITE_BACKEND_URL=""
-RUN npm run build
+RUN bun run build
 
 # --- Stage 2: backend + static assets ---
 FROM oven/bun:1.1-slim

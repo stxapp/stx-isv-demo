@@ -24,6 +24,7 @@ import { Database } from "bun:sqlite";
 import { dirname } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { config } from "./config";
+import { UNKNOWN_MEMBER } from "./memberContext";
 
 // Ensure the directory for the SQLite file exists (e.g. the mounted ./data).
 // An in-memory database (":memory:") has no directory. The directory is only
@@ -194,3 +195,31 @@ export function adoptRetiredAppRows(to: string): { from: string[]; to: string | 
 }
 
 adoptRetiredAppRows(config.app.id);
+
+// The token-endpoint notes that are a member's grant (code exchange, refresh,
+// revoke), as stx.ts writes them; app token mints are not among them.
+export const MEMBER_TOKEN_NOTES = [
+  "Linked STX account",
+  "Code exchange failed",
+  "refreshed access token",
+  "refresh failed",
+  "Revoked STX grant",
+  "Revoke failed",
+];
+
+// Rows of those calls written before they carried their member have none, so
+// they would read as app-level and be shown to everyone. Their member cannot be
+// recovered: mark them as an unknown member's, which is shown to no one.
+// Idempotent; returns how many rows it marked.
+export function hideLegacyMemberTokenRows(): number {
+  const marks = MEMBER_TOKEN_NOTES.map((_, i) => `$n${i}`).join(", ");
+  const args: Record<string, string> = { $who: UNKNOWN_MEMBER };
+  MEMBER_TOKEN_NOTES.forEach((n, i) => (args[`$n${i}`] = n));
+  const { changes } = db
+    .query(`UPDATE activity SET user_id = $who WHERE user_id IS NULL AND note IN (${marks})`)
+    .run(args);
+  if (changes > 0) console.log(`Hid ${changes} member token rows written without their member.`);
+  return changes;
+}
+
+hideLegacyMemberTokenRows();

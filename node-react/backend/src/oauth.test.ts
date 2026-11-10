@@ -7,6 +7,7 @@
 // the modules under test (hence the top-level await imports below).
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { allActivity } from "../test-support/activityRows";
 
 process.env.STX_BASE_URL = "https://stx.example.com";
 // The app profile: Sideline.
@@ -25,7 +26,7 @@ const { config, getApp } = await import("./config");
 const { db } = await import("./db");
 const { activityStore, linkStore, userStore } = await import("./stores");
 const { memberClient, pendingStore, stxApp } = await import("./stx");
-const { apiRoutes } = await import("./routes/api");
+const { acceptsGzip, apiRoutes } = await import("./routes/api");
 const { linkRoutes } = await import("./login/link");
 const authRoutes = linkRoutes({ requireSignedIn: false });
 
@@ -249,12 +250,14 @@ describe("member calls: bearer, refresh on 401, rotation", () => {
     expect(link.accessToken).toBe("stx_at_new");
     expect(link.refreshToken).toBe("stx_rt_new");
 
-    const log = activityStore.list(10, "sideline").reverse();
+    const log = allActivity(db, "sideline", 10).reverse();
     expect(log.map((r) => [r.path, r.status, r.note])).toEqual([
       ["/api/v1/account/balance", 401, "Checked STX balance"],
       ["/oauth/token", 200, "refreshed access token"],
       ["/api/v1/account/balance", 200, "Checked STX balance (retry after token refresh)"],
     ]);
+    // The refresh the SDK made on its own is the member's row too.
+    expect(log.map((r) => r.userId)).toEqual([uid, uid, uid]);
   });
 
   test("parallel 401s for one user refresh once (a second refresh would read as token reuse)", async () => {
@@ -347,7 +350,40 @@ describe("app token (client_credentials, market_data)", () => {
       "Bearer stx_at_app_sideline-test-client-id",
       "Bearer stx_at_app_sideline-test-client-id",
     ]);
-    expect(activityStore.list(10, "mint-test").some((r) => r.note === "minted app token")).toBe(true);
+    expect(allActivity(db, "mint-test", 10).some((r) => r.note === "minted app token")).toBe(true);
+  });
+});
+
+describe("acceptsGzip", () => {
+  test("gzip named with q above 0, or allowed by *; never when gzip;q=0", () => {
+    expect(acceptsGzip("gzip, deflate, br")).toBe(true);
+    expect(acceptsGzip("br;q=1.0, gzip;q=0.8")).toBe(true);
+    expect(acceptsGzip("*")).toBe(true);
+    expect(acceptsGzip("gzip;q=0, identity;q=1")).toBe(false);
+    expect(acceptsGzip("gzip;q=0, *")).toBe(false);
+    expect(acceptsGzip("*;q=0")).toBe(false);
+    expect(acceptsGzip("identity")).toBe(false);
+    expect(acceptsGzip(undefined)).toBe(false);
+  });
+});
+
+describe("GET /api/markets", () => {
+  test("sends the catalog gzipped when the browser accepts it, plain JSON otherwise", async () => {
+    mockFetch((call) =>
+      call.url.endsWith("/oauth/token")
+        ? json(200, { access_token: "stx_at_app", expires_in: 3600 })
+        : json(200, { markets: [{ market_id: "m-1", title: "One", status: "open", max_price: "1.0000" }], cursor: null }),
+    );
+    const zipped = await apiRoutes.request("/markets", { headers: { "accept-encoding": "gzip, deflate, br" } });
+    expect(zipped.status).toBe(200);
+    expect(zipped.headers.get("content-encoding")).toBe("gzip");
+    const raw = new Uint8Array(await zipped.arrayBuffer());
+    const body = JSON.parse(new TextDecoder().decode(Bun.gunzipSync(raw)));
+    expect(body.markets.map((m: { marketId: string }) => m.marketId)).toEqual(["m-1"]);
+
+    const plain = await apiRoutes.request("/markets");
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect(((await plain.json()) as { markets: unknown[] }).markets).toHaveLength(1);
   });
 });
 

@@ -113,8 +113,10 @@ export type ActivityEntry = Omit<ActivityRecord, "id" | "sdkCall" | "hasDetail">
 
 export interface ActivityStore {
   record(entry: ActivityEntry): void;
-  // List newest-first, optionally filtered to one app. Details are not listed.
-  list(limit: number, appId?: string): ActivityRecord[];
+  // List newest-first what `viewer` may see: app-level rows, plus member rows
+  // that are their own (`userId`; null sees app-level rows only), optionally
+  // filtered to one app. Details are not listed.
+  list(limit: number, viewer: { userId: string | null; appId?: string }): ActivityRecord[];
   // The stored detail of one row, and who it belongs to (null: app-level).
   detail(id: number): { appId: string | null; userId: string | null; detail: ActivityDetail | null } | null;
 }
@@ -378,14 +380,16 @@ export const activityStore: ActivityStore = {
     });
   },
 
-  list(limit, appId) {
+  list(limit, { userId, appId }) {
     const cols = `id, ts, app_id AS appId, method, path, status, note, sdk_call AS sdkCall,
                   (detail IS NOT NULL) AS hasDetail`;
-    const rows = appId
-      ? db
-          .query(`SELECT ${cols} FROM activity WHERE app_id = $app ORDER BY id DESC LIMIT $limit`)
-          .all({ $app: appId, $limit: limit })
-      : db.query(`SELECT ${cols} FROM activity ORDER BY id DESC LIMIT $limit`).all({ $limit: limit });
+    const rows = db
+      .query(
+        `SELECT ${cols} FROM activity
+         WHERE (user_id IS NULL OR user_id = $uid) AND ($app IS NULL OR app_id = $app)
+         ORDER BY id DESC LIMIT $limit`,
+      )
+      .all({ $uid: userId ?? null, $app: appId ?? null, $limit: limit });
     return (rows as (Omit<ActivityRecord, "hasDetail"> & { hasDetail: number })[]).map((r) => ({
       ...r,
       hasDetail: r.hasDetail === 1,

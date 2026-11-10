@@ -9,6 +9,8 @@
 // at import time, so the required vars (and DB_PATH=:memory:) are set first.
 
 import { beforeEach, describe, expect, test } from "bun:test";
+import { allActivity } from "../test-support/activityRows";
+import { UNKNOWN_MEMBER } from "./memberContext";
 
 // The `config` singleton is built once per test process and shared across test
 // files, so this env block is identical to the one in oauth.test.ts: whichever
@@ -20,7 +22,7 @@ process.env.REDIRECT_URI = "http://localhost:8787/callback";
 process.env.OAUTH_SCOPES = "profile.read balance.read portfolio.read orders.read orders.write";
 process.env.DB_PATH = ":memory:";
 
-const { db, adoptRetiredAppRows } = await import("./db");
+const { db, adoptRetiredAppRows, hideLegacyMemberTokenRows } = await import("./db");
 const { userStore, linkStore, flowStore, activityStore } = await import("./stores");
 const { extractStxCashCents, centsToDollarString } = await import("./helpers");
 
@@ -156,11 +158,44 @@ describe("activityStore: the request log", () => {
     activityStore.record({ ts: 2, appId: "oldapp", method: "GET", path: "/b", status: 200, note: null });
     activityStore.record({ ts: 3, appId: "sideline", method: "POST", path: "/c", status: 201, note: null });
 
-    const sidelineOnly = activityStore.list(100, "sideline");
+    const sidelineOnly = activityStore.list(100, { userId: null, appId: "sideline" });
     expect(sidelineOnly.map((r) => r.path)).toEqual(["/c", "/a"]);
+    expect(activityStore.list(100, { userId: null })).toHaveLength(3);
+  });
 
-    const all = activityStore.list(100);
-    expect(all.length).toBe(3);
+  test("a viewer sees app-level rows and their own member rows, never another member's", () => {
+    const row = (path: string, userId: string | null) =>
+      activityStore.record({ ts: 1, appId: "sideline", method: "GET", path, status: 200, note: null, userId });
+    row("/app", null);
+    row("/mine", "user-a");
+    row("/theirs", "user-b");
+    row("/unknown", UNKNOWN_MEMBER);
+
+    const paths = (userId: string | null) =>
+      activityStore.list(100, { userId, appId: "sideline" }).map((r) => r.path);
+    expect(paths(null)).toEqual(["/app"]);
+    expect(paths("user-a")).toEqual(["/mine", "/app"]);
+    expect(paths("user-b")).toEqual(["/theirs", "/app"]);
+  });
+});
+
+describe("hideLegacyMemberTokenRows: member token rows written before they carried a member", () => {
+  test("are hidden from everyone; app token mints and other rows are left as they were", () => {
+    const row = (note: string, userId: string | null = null) =>
+      activityStore.record({ ts: 1, appId: "sideline", method: "POST", path: "/oauth/token", status: 200, note, userId });
+    row("Linked STX account");
+    row("refreshed access token");
+    row("Revoked STX grant");
+    row("minted app token");
+    row("refreshed access token", "user-a");
+
+    expect(hideLegacyMemberTokenRows()).toBe(3);
+    expect(activityStore.list(100, { userId: null, appId: "sideline" }).map((r) => r.note)).toEqual(["minted app token"]);
+    expect(activityStore.list(100, { userId: "user-a", appId: "sideline" }).map((r) => r.note)).toEqual([
+      "refreshed access token",
+      "minted app token",
+    ]);
+    expect(hideLegacyMemberTokenRows()).toBe(0);
   });
 });
 
@@ -214,7 +249,7 @@ describe("adoptRetiredAppRows: members keep their rows when the app id changes",
     expect(link?.appId).toBe("sideline");
     expect(link?.accessToken).toBe("stx_at_A");
     expect(flowStore.take("state-1")?.appId).toBe("sideline");
-    expect(activityStore.list(10, "sideline")).toHaveLength(1);
+    expect(allActivity(db, "sideline", 10)).toHaveLength(1);
     // Idempotent: a second boot finds nothing retired.
     expect(adoptRetiredAppRows("sideline")).toEqual({ from: [], to: null });
   });

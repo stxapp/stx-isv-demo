@@ -86,4 +86,4 @@ What the app does with the SDK's errors:
 
 ## See every call as it happens
 
-The running app's **API calls** page lists each request the backend made to STX, with the SDK call behind it and a redacted request and response ([`sdkCall.ts`](../node-react/backend/src/sdkCall.ts), [`activityDetail.ts`](../node-react/backend/src/activityDetail.ts)).
+The running app's **API calls** page lists each request the backend made to STX, with the SDK call behind it and a redacted request and response. The app's own calls are shown to everyone; a member's calls only to that member ([`memberContext.ts`](../node-react/backend/src/memberContext.ts), [`sdkCall.ts`](../node-react/backend/src/sdkCall.ts), [`activityDetail.ts`](../node-react/backend/src/activityDetail.ts)).

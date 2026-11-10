@@ -9,6 +9,7 @@
 
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { allActivity } from "../test-support/activityRows";
 
 process.env.STX_BASE_URL = "https://stx.example.com";
 process.env.CLIENT_ID = "sideline-test-client-id";
@@ -113,7 +114,7 @@ function linkedUser(access: string, expiresAt: number | null = null): string {
 
 // Oldest first, as the panel reads bottom-up.
 function rows() {
-  return activityStore.list(50, "sideline").reverse();
+  return allActivity(db, "sideline", 50).reverse();
 }
 
 beforeEach(() => {
@@ -193,6 +194,23 @@ describe("sdk_call on socket rows", () => {
         "const ws = stx.websocket({ onReconnect }); const view = await ws.accountView({ onChange })",
       ],
     ]);
+  });
+
+  test("a token refresh the live feed's socket needs is the member's row", async () => {
+    // Expired: the socket's handshake refreshes before it connects.
+    const uid = linkedUser("stx_at_old", Date.now() - 1000);
+    mockFetch((url) =>
+      url.endsWith("/oauth/token")
+        ? json(200, { access_token: "stx_at_new", refresh_token: "stx_rt_new", expires_in: 3600 })
+        : json(200, { me: { user_id: "stx-member-1" } }),
+    );
+
+    const unsub = await subscribe(sideline, uid, () => {}, () => {});
+    unsub?.();
+
+    const refresh = rows().filter((r) => r.note === "refreshed access token");
+    expect(refresh.length).toBeGreaterThan(0);
+    expect(refresh.every((r) => r.userId === uid)).toBe(true);
   });
 
   test("a grant without every account scope joins the topics it has", async () => {

@@ -103,8 +103,8 @@ export interface Participant {
 }
 
 // Fetches the market catalog from the backend: every open market. The backend
-// walks STX's pages, caches the result for a minute, and reshapes STX's REST
-// response into `MarketSummary`. Sends the session cookie + active app (same as
+// walks STX's pages, keeps the result (refreshed in the background each
+// minute), and reshapes STX's REST response into `MarketSummary`. Sends the session cookie + active app (same as
 // every /api call) so the read is attributed to the right app profile. Throws
 // with a readable message on transport errors so the caller can surface them.
 export async function fetchMarkets(): Promise<MarketSummary[]> {

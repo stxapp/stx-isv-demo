@@ -5,6 +5,8 @@
 // list and answer cleanly.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { allActivity } from "../test-support/activityRows";
+import { asMember, UNKNOWN_MEMBER } from "./memberContext";
 
 // Same env block as oauth.test.ts / stores.test.ts (the config singleton is
 // shared across test files in one process).
@@ -170,14 +172,15 @@ describe("token endpoint rows", () => {
     const { oauth, tokens } = stxApp(sideline);
     const auth = await oauth.beginAuthorization(pendingStore, { data: { sessionId: sid, appId: "sideline", userId: uid } });
     const cb = await readCallback(pendingStore, { code: "stx_code_SECRET", state: auth.state });
-    await oauth.redeemAuthorization(cb, { store: tokens, memberKey: uid });
+    // As the link callback does it: as the member, so the row is theirs.
+    await asMember(uid, () => oauth.redeemAuthorization(cb, { store: tokens, memberKey: uid }));
     // The tokens themselves are stored, where they belong.
     expect(linkStore.get(uid)!.accessToken).toBe("stx_at_SECRET_ACCESS");
 
     SECRETS.push(auth.codeVerifier);
     expectNoSecrets(dbDump());
 
-    const [row] = activityStore.list(10, "sideline");
+    const [row] = allActivity(db, "sideline", 10);
     expect(row!.note).toBe("Linked STX account");
     expect(row!.hasDetail).toBe(true);
     const list = await getJson("/activity?app=sideline", sid);
@@ -188,6 +191,28 @@ describe("token endpoint rows", () => {
     expect(detail.body.detail.request.body).toMatchObject({ grant_type: "authorization_code", code: "[redacted]" });
     expect(detail.body.detail.response.body).toMatchObject({ access_token: "[redacted]", token_type: "bearer" });
     SECRETS.pop();
+
+    // Another browser sees neither the row nor its detail.
+    const other = signedIn();
+    const theirList = await getJson("/activity?app=sideline", other.sid);
+    expect(theirList.body.activity.map((r: { id: number }) => r.id)).not.toContain(row!.id);
+    expect((await getJson(`/activity/${row!.id}/detail`, other.sid)).status).toBe(404);
+    expect((await getJson(`/activity/${row!.id}/detail`)).status).toBe(404);
+  });
+
+  test("a member's token request made for no known member is shown to no one", async () => {
+    mockFetch(() => json(200, { access_token: "stx_at_X", refresh_token: "stx_rt_X", token_type: "bearer", expires_in: 3600 }));
+    const { sid, uid } = signedIn();
+    const { oauth, tokens } = stxApp(sideline);
+    const auth = await oauth.beginAuthorization(pendingStore, { data: { sessionId: sid, appId: "sideline", userId: uid } });
+    const cb = await readCallback(pendingStore, { code: "stx_code_SECRET", state: auth.state });
+    await oauth.redeemAuthorization(cb, { store: tokens, memberKey: uid });
+
+    const [row] = allActivity(db, "sideline", 10);
+    expect(row!.note).toBe("Linked STX account");
+    expect(row!.userId).toBe(UNKNOWN_MEMBER);
+    expect((await getJson("/activity?app=sideline", sid)).body.activity).toEqual([]);
+    expect((await getJson(`/activity/${row!.id}/detail`, sid)).status).toBe(404);
   });
 });
 
@@ -208,7 +233,7 @@ describe("member REST rows", () => {
     });
     expectNoSecrets(dbDump());
 
-    const [row] = activityStore.list(10, "sideline");
+    const [row] = allActivity(db, "sideline", 10);
     const detail = await getJson(`/activity/${row!.id}/detail`, sid);
     expect(detail.body.detail.request).toMatchObject({ method: "POST", path: "/api/v1/orders" });
     expect(detail.body.detail.request.body).toMatchObject({ market_id: "m-1", price: "0.01" });
@@ -226,7 +251,7 @@ describe("member REST rows", () => {
     );
     await memberClient(sideline, uid, "Checked STX balance").balance();
     expectNoSecrets(dbDump());
-    const [row] = activityStore.list(10, "sideline");
+    const [row] = allActivity(db, "sideline", 10);
     const detail = await getJson(`/activity/${row!.id}/detail`, sid);
     expectNoSecrets(detail.text);
     expect(detail.body.detail.response.body.balance).toEqual({ available_balance: "12.00" });
@@ -237,7 +262,7 @@ describe("member REST rows", () => {
     link(uid);
     mockFetch(() => json(200, { balance: { available_balance: "12.00" } }));
     await memberClient(sideline, uid, "Checked STX balance").balance();
-    const [row] = activityStore.list(10, "sideline");
+    const [row] = allActivity(db, "sideline", 10);
     const other = signedIn();
     expect((await getJson(`/activity/${row!.id}/detail`, other.sid)).status).toBe(404);
     expect((await getJson(`/activity/${row!.id}/detail`)).status).toBe(404);

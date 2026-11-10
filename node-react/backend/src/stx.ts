@@ -28,6 +28,7 @@ import {
 import { config, getApp, type AppProfile } from "./config";
 import { buildDetail } from "./activityDetail";
 import { sdkCalls } from "./sdkCall";
+import { actingAs, currentMember, UNKNOWN_MEMBER } from "./memberContext";
 import { activityStore, flowStore, linkStore } from "./stores";
 
 // The only scope app tokens ask for: read-only market data.
@@ -151,7 +152,8 @@ export type SdkCall = string | ((e: ResponseEvent) => string);
 // note for the calls it makes; `sdkCall` the @stxapp/stx-typescript call, as code.
 export function memberClient(profile: AppProfile, userId: string, label?: string, sdkCall?: SdkCall): STX {
   const app = stxApp(profile);
-  return app.oauth.memberClient(app.tokens, userId, { onResponse: logResponse(profile.id, userId, label, sdkCall) });
+  // As the member, so a token refresh it triggers is logged as theirs.
+  return actingAs(userId, app.oauth.memberClient(app.tokens, userId, { onResponse: logResponse(profile.id, userId, label, sdkCall) }));
 }
 
 // ---- Activity log -------------------------------------------------------------
@@ -192,17 +194,19 @@ function logResponse(appId: string, userId: string, label?: string, sdkCall?: Sd
 
 // The activity note and SDK call for one token-endpoint request, by grant.
 // Null for a request that is not logged here.
-function tokenRow(body: URLSearchParams, ok: boolean): { note: string; sdkCall: string } | null {
+// `member`: the row is about a member's grant (code exchange, refresh), not the app's own token.
+function tokenRow(body: URLSearchParams, ok: boolean): { note: string; sdkCall: string; member: boolean } | null {
   switch (body.get("grant_type")) {
     case "refresh_token":
-      return { note: ok ? "refreshed access token" : "refresh failed", sdkCall: sdkCalls.refresh() };
+      return { note: ok ? "refreshed access token" : "refresh failed", sdkCall: sdkCalls.refresh(), member: true };
     case "client_credentials":
       return {
         note: ok ? "minted app token" : "app token mint failed",
         sdkCall: sdkCalls.appToken(body.get("scope") ?? MARKET_DATA_SCOPE),
+        member: false,
       };
     case "authorization_code":
-      return { note: ok ? "Linked STX account" : "Code exchange failed", sdkCall: sdkCalls.redeemAuthorization() };
+      return { note: ok ? "Linked STX account" : "Code exchange failed", sdkCall: sdkCalls.redeemAuthorization(), member: true };
     default:
       return null;
   }
@@ -222,7 +226,7 @@ function tokenLoggingFetch(profile: AppProfile): (input: string, init: RequestIn
       path === config.paths.token
         ? tokenRow(body, res.ok)
         : path === config.paths.revoke
-          ? { note: res.ok ? "Revoked STX grant" : "Revoke failed", sdkCall: sdkCalls.unlink() }
+          ? { note: res.ok ? "Revoked STX grant" : "Revoke failed", sdkCall: sdkCalls.unlink(), member: true }
           : null;
     if (row) {
       const responseText = await res
@@ -237,6 +241,8 @@ function tokenLoggingFetch(profile: AppProfile): (input: string, init: RequestIn
         status: res.status,
         note: row.note,
         sdkCall: row.sdkCall,
+        // A member's grant is shown only to that member (see memberContext.ts).
+        userId: row.member ? (currentMember() ?? UNKNOWN_MEMBER) : null,
         detail: buildDetail({
           method: "POST",
           path,

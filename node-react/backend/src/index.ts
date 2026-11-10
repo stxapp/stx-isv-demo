@@ -12,7 +12,7 @@ import { cors } from "hono/cors";
 import { config } from "./config";
 import "./db"; // create tables on boot
 import { brandIndexHtml } from "./brand";
-import { apiRoutes, UnknownAppError } from "./routes/api";
+import { apiRoutes, UnknownAppError, warmMarketCatalog } from "./routes/api";
 import { LOGIN_PATHS, loginRoutes } from "./login";
 import { NotLinkedError } from "./stx";
 import { serveStatic } from "hono/bun";
@@ -77,6 +77,8 @@ app.onError((err, c) => {
   console.error(err);
   return c.json({ error: "internal_error", message: String(err) }, 500);
 });
+
+warmMarketCatalog(config.app);
 
 const login = config.login.mode === "own" ? `own (${config.login.own})` : config.login.mode;
 console.log(

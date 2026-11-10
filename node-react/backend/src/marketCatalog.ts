@@ -197,62 +197,87 @@ export function fetchCatalog(app: AppProfile): Promise<CatalogResult> {
   return fetchAllMarkets(stxApp(app).catalog);
 }
 
+// The JSON the route sends for a catalog, serialized and gzipped once per fetch
+// rather than once per request: 5,000 markets are about 10 MB of JSON and about
+// 0.5 MB gzipped.
+export interface CatalogBody {
+  json: string;
+  gzip: Uint8Array;
+}
+
+export function encodeCatalog(result: CatalogResult): CatalogBody {
+  const json = JSON.stringify({ markets: result.markets, truncated: result.truncated });
+  return { json, gzip: Bun.gzipSync(json) };
+}
+
 export interface CachedCatalog {
-  // What to serve: the fresh fetch, or the last good one when a refetch failed.
+  // What to serve: the last complete fetch, or, with none yet, whatever the
+  // failed fetch read.
   result: CatalogResult;
-  // The fetch this request ran, when it ran one (for the activity log). Unset
-  // when the request was served from the cache or joined another's fetch.
-  fetched?: CatalogResult;
-  // True when a refetch failed and an older catalog is served instead.
+  // The encoded response, when `result` is a cached complete fetch.
+  body?: CatalogBody;
+  // True when the latest refetch failed and an older catalog is served.
   stale: boolean;
 }
 
-// One catalog per app profile, refetched once it is older than `ttlMs`.
-// Concurrent requests share one fetch. Only a complete fetch is cached: when a
-// refetch fails, the last good catalog is served (marked stale), or, with none,
-// whatever the failed fetch read; either way the next request tries again.
+// One catalog per app profile. Only the first request (or one after a failed
+// first fetch) waits for STX: once a complete catalog is cached, a request past
+// `ttlMs` is served the cached one at once and starts a refetch in the
+// background. Concurrent requests share one fetch. Only a complete fetch is
+// cached. `onFetched` sees every fetch (for the activity log).
 export class CatalogCache {
-  #entry: { at: number; result: CatalogResult } | undefined;
+  #entry: { at: number; result: CatalogResult; body: CatalogBody } | undefined;
   #inflight: Promise<CachedCatalog> | undefined;
+  #lastFailed = false;
 
   constructor(
     private readonly load: () => Promise<CatalogResult>,
     private readonly ttlMs = CATALOG_TTL_MS,
     private readonly now: () => number = Date.now,
+    private readonly onFetched: (fetched: CatalogResult) => void = () => {},
   ) {}
 
   async get(): Promise<CachedCatalog> {
-    if (this.#entry && this.now() - this.#entry.at < this.ttlMs) {
-      return { result: this.#entry.result, stale: false };
+    const entry = this.#entry;
+    if (entry) {
+      if (this.now() - entry.at >= this.ttlMs) this.refresh().catch(() => {});
+      return { result: entry.result, body: entry.body, stale: this.#lastFailed };
     }
-    if (this.#inflight) {
-      const shared = await this.#inflight;
-      return { result: shared.result, stale: shared.stale };
+    return this.refresh();
+  }
+
+  // Fetch now, or join the fetch already running.
+  refresh(): Promise<CachedCatalog> {
+    if (!this.#inflight) {
+      this.#inflight = this.#refetch().finally(() => {
+        this.#inflight = undefined;
+      });
     }
-    this.#inflight = this.#refetch().finally(() => {
-      this.#inflight = undefined;
-    });
     return this.#inflight;
   }
 
   async #refetch(): Promise<CachedCatalog> {
     const fetched = await this.load();
+    this.onFetched(fetched);
     if (fetched.status === 200) {
-      this.#entry = { at: this.now(), result: fetched };
-      return { result: fetched, fetched, stale: false };
+      this.#entry = { at: this.now(), result: fetched, body: encodeCatalog(fetched) };
+      this.#lastFailed = false;
+      return { result: fetched, body: this.#entry.body, stale: false };
     }
-    if (this.#entry) return { result: this.#entry.result, fetched, stale: true };
-    return { result: fetched, fetched, stale: false };
+    this.#lastFailed = true;
+    if (this.#entry) return { result: this.#entry.result, body: this.#entry.body, stale: true };
+    return { result: fetched, stale: false };
   }
 }
 
 const caches = new Map<string, CatalogCache>();
 
-// The shared catalog cache for an app profile.
-export function catalogCacheFor(app: AppProfile): CatalogCache {
+// The shared catalog cache for an app profile. `onFetched` is set by the first
+// caller (the /api/markets route, and the warm-up at boot, pass the same one).
+export function catalogCacheFor(app: AppProfile, onFetched?: (fetched: CatalogResult) => void): CatalogCache {
   let cache = caches.get(app.id);
   if (!cache) {
-    cache = new CatalogCache(() => fetchCatalog(app));
+    cache = new CatalogCache(() => fetchCatalog(app), CATALOG_TTL_MS, Date.now, onFetched);
     caches.set(app.id, cache);
   }
   return cache;

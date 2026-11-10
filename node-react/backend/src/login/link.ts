@@ -15,6 +15,7 @@ import { sdkCalls } from "../sdkCall";
 import { activityStore, userStore } from "../stores";
 import { pendingStore, stxApp, type FlowData } from "../stx";
 import { connectHints, finishLink } from "./shared";
+import { asMember } from "../memberContext";
 
 export interface LinkOptions {
   // True when the app has a real login: linking then needs a signed-in user.
@@ -105,7 +106,7 @@ export function linkRoutes(opts: LinkOptions): Hono {
     // tokens against the flow's user (account linking).
     const { oauth, tokens } = stxApp(app);
     try {
-      await oauth.redeemAuthorization(callback, { store: tokens, memberKey: user.id });
+      await asMember(user.id, () => oauth.redeemAuthorization(callback, { store: tokens, memberKey: user.id }));
     } catch {
       return finishLink(c, `error=token_exchange_failed&app=${app.id}`);
     }
