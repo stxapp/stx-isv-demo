@@ -22,7 +22,7 @@ process.env.REDIRECT_URI = "http://localhost:8787/callback";
 process.env.OAUTH_SCOPES = "profile.read balance.read portfolio.read orders.read orders.write";
 process.env.DB_PATH = ":memory:";
 
-const { db, adoptRetiredAppRows } = await import("./db");
+const { db, adoptRetiredAppRows, hideLegacyMemberTokenRows } = await import("./db");
 const { userStore, linkStore, flowStore, activityStore } = await import("./stores");
 const { extractStxCashCents, centsToDollarString } = await import("./helpers");
 
@@ -176,6 +176,26 @@ describe("activityStore: the request log", () => {
     expect(paths(null)).toEqual(["/app"]);
     expect(paths("user-a")).toEqual(["/mine", "/app"]);
     expect(paths("user-b")).toEqual(["/theirs", "/app"]);
+  });
+});
+
+describe("hideLegacyMemberTokenRows: member token rows written before they carried a member", () => {
+  test("are hidden from everyone; app token mints and other rows are left as they were", () => {
+    const row = (note: string, userId: string | null = null) =>
+      activityStore.record({ ts: 1, appId: "sideline", method: "POST", path: "/oauth/token", status: 200, note, userId });
+    row("Linked STX account");
+    row("refreshed access token");
+    row("Revoked STX grant");
+    row("minted app token");
+    row("refreshed access token", "user-a");
+
+    expect(hideLegacyMemberTokenRows()).toBe(3);
+    expect(activityStore.list(100, { userId: null, appId: "sideline" }).map((r) => r.note)).toEqual(["minted app token"]);
+    expect(activityStore.list(100, { userId: "user-a", appId: "sideline" }).map((r) => r.note)).toEqual([
+      "refreshed access token",
+      "minted app token",
+    ]);
+    expect(hideLegacyMemberTokenRows()).toBe(0);
   });
 });
 

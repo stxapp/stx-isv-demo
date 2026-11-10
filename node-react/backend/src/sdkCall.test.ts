@@ -196,6 +196,23 @@ describe("sdk_call on socket rows", () => {
     ]);
   });
 
+  test("a token refresh the live feed's socket needs is the member's row", async () => {
+    // Expired: the socket's handshake refreshes before it connects.
+    const uid = linkedUser("stx_at_old", Date.now() - 1000);
+    mockFetch((url) =>
+      url.endsWith("/oauth/token")
+        ? json(200, { access_token: "stx_at_new", refresh_token: "stx_rt_new", expires_in: 3600 })
+        : json(200, { me: { user_id: "stx-member-1" } }),
+    );
+
+    const unsub = await subscribe(sideline, uid, () => {}, () => {});
+    unsub?.();
+
+    const refresh = rows().filter((r) => r.note === "refreshed access token");
+    expect(refresh.length).toBeGreaterThan(0);
+    expect(refresh.every((r) => r.userId === uid)).toBe(true);
+  });
+
   test("a grant without every account scope joins the topics it has", async () => {
     const uid = linkedUser("stx_at_ok", Date.now() + 3600_000);
     linkStore.save({ ...linkStore.get(uid)!, scopes: ["profile.read", "balance.read", "orders.write"] });

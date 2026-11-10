@@ -481,11 +481,28 @@ apiRoutes.get("/markets", async (c) => {
     "Cache-Control": "no-store",
   };
   if (stale) headers["X-Catalog-Stale"] = "1";
-  if (/\bgzip\b/.test(c.req.header("accept-encoding") ?? "")) {
+  if (acceptsGzip(c.req.header("accept-encoding"))) {
     return new Response(body.gzip, { headers: { ...headers, "Content-Encoding": "gzip" } });
   }
   return new Response(body.json, { headers });
 });
+
+// Whether an Accept-Encoding header allows gzip: named with a q above 0, or not
+// named and allowed by `*`. `gzip;q=0` refuses it even when `*` is allowed.
+export function acceptsGzip(header: string | undefined): boolean {
+  let gzip: number | null = null;
+  let star: number | null = null;
+  for (const part of (header ?? "").split(",")) {
+    const [name, ...params] = part.trim().toLowerCase().split(";");
+    const qParam = params.map((p) => p.trim()).find((p) => p.startsWith("q="));
+    const q = qParam ? Number(qParam.slice(2)) : 1;
+    const weight = Number.isFinite(q) ? q : 0;
+    if (name === "gzip" || name === "x-gzip") gzip = weight;
+    else if (name === "*") star = weight;
+  }
+  if (gzip !== null) return gzip > 0;
+  return star !== null && star > 0;
+}
 
 // The app's catalog cache, logging each fetch it makes as an activity row.
 function marketCatalog(app: AppProfile) {

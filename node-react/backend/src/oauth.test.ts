@@ -26,7 +26,7 @@ const { config, getApp } = await import("./config");
 const { db } = await import("./db");
 const { activityStore, linkStore, userStore } = await import("./stores");
 const { memberClient, pendingStore, stxApp } = await import("./stx");
-const { apiRoutes } = await import("./routes/api");
+const { acceptsGzip, apiRoutes } = await import("./routes/api");
 const { linkRoutes } = await import("./login/link");
 const authRoutes = linkRoutes({ requireSignedIn: false });
 
@@ -351,6 +351,19 @@ describe("app token (client_credentials, market_data)", () => {
       "Bearer stx_at_app_sideline-test-client-id",
     ]);
     expect(allActivity(db, "mint-test", 10).some((r) => r.note === "minted app token")).toBe(true);
+  });
+});
+
+describe("acceptsGzip", () => {
+  test("gzip named with q above 0, or allowed by *; never when gzip;q=0", () => {
+    expect(acceptsGzip("gzip, deflate, br")).toBe(true);
+    expect(acceptsGzip("br;q=1.0, gzip;q=0.8")).toBe(true);
+    expect(acceptsGzip("*")).toBe(true);
+    expect(acceptsGzip("gzip;q=0, identity;q=1")).toBe(false);
+    expect(acceptsGzip("gzip;q=0, *")).toBe(false);
+    expect(acceptsGzip("*;q=0")).toBe(false);
+    expect(acceptsGzip("identity")).toBe(false);
+    expect(acceptsGzip(undefined)).toBe(false);
   });
 });
 

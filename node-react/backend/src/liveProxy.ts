@@ -45,6 +45,7 @@ import { safeBody, type ActivityDetail } from "./activityDetail";
 import { sdkCalls } from "./sdkCall";
 import { activityStore, linkStore } from "./stores";
 import { memberClient } from "./stx";
+import { asMember } from "./memberContext";
 
 export type LiveKind = "balances" | "fills" | "orders" | "positions";
 
@@ -119,7 +120,13 @@ function partOf(view: AccountView, kind: LiveKind): Partial<AccountState> {
   }
 }
 
+// Opened as the member (memberContext.ts), so the socket's later work (its
+// auth, joins, reconnects and any token refresh they need) is logged as theirs.
 function open(app: AppProfile, userId: string): Conn {
+  return asMember(userId, () => openConn(app, userId));
+}
+
+function openConn(app: AppProfile, userId: string): Conn {
   const key = keyOf(app, userId);
   const listeners = new Set<Listener>();
   const enders = new Set<() => void>();
