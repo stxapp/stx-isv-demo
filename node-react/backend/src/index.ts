@@ -16,6 +16,7 @@ import { apiRoutes, UnknownAppError, warmMarketCatalog } from "./routes/api";
 import { LOGIN_PATHS, loginRoutes } from "./login";
 import { NotLinkedError } from "./stx";
 import { serveStatic } from "hono/bun";
+import { assetMiddleware } from "./staticAssets";
 
 const app = new Hono();
 
@@ -50,6 +51,8 @@ async function indexHtml(c: Context) {
   const file = Bun.file("./public/index.html");
   if (!(await file.exists())) return c.notFound();
   const { id, name } = config.app;
+  // Always revalidated, so a deploy's new asset names are picked up at once.
+  c.header("Cache-Control", "no-cache");
   return c.html(
     brandIndexHtml(await file.text(), {
       origin: config.publicUrl || new URL(c.req.url).origin,
@@ -62,6 +65,7 @@ async function indexHtml(c: Context) {
 }
 app.get("/", indexHtml);
 app.get("/index.html", indexHtml);
+app.use("/assets/*", assetMiddleware("./public"));
 app.use("/*", serveStatic({ root: "./public" }));
 // SPA fallback: any unmatched GET returns index.html so a deep link resolves.
 app.get("*", indexHtml);
